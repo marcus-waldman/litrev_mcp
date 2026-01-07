@@ -48,7 +48,7 @@ from litrev_mcp.tools.setup import (
     setup_check,
     setup_create_project,
 )
-from litrev_mcp.tools.pdf import process_pdf_inbox
+from litrev_mcp.tools.pdf import process_pdf_inbox, migrate_zotero_attachments
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -500,6 +500,20 @@ async def list_tools() -> list[Tool]:
                 "required": ["project"],
             },
         ),
+        Tool(
+            name="migrate_zotero_attachments",
+            description="Migrate PDFs stored on Zotero's servers to Google Drive. Downloads server-stored attachments, saves to Drive folder with citation key naming, adds Drive link to Zotero, and deletes original. Useful for papers added by drag-drop.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {
+                        "type": "string",
+                        "description": "Project code (e.g., 'TEST')",
+                    },
+                },
+                "required": ["project"],
+            },
+        ),
     ]
 
 
@@ -663,6 +677,12 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     # PDF Processing tools
     if name == "process_pdf_inbox":
         result = await process_pdf_inbox(
+            project=arguments.get("project"),
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "migrate_zotero_attachments":
+        result = await migrate_zotero_attachments(
             project=arguments.get("project"),
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]

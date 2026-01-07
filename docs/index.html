@@ -65,6 +65,17 @@ export ZOTERO_USER_ID="your-user-id-here"</code></pre>
                             <button class="copy-btn" data-text="Use setup_check to verify my configuration">Copy</button>
                         </div>
                     </li>
+                    <li>
+                        <strong>(Optional) Enable Google Drive links</strong>
+                        <p>To automatically add Google Drive PDF links to Zotero entries:</p>
+                        <ol type="a">
+                            <li>Create a Google Cloud project at <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a></li>
+                            <li>Enable the Google Drive API</li>
+                            <li>Create OAuth credentials (Desktop app type)</li>
+                            <li>Download <code>credentials.json</code> to <code>Literature/.litrev/credentials.json</code></li>
+                        </ol>
+                        <p><em>First use will prompt browser authentication. Tokens are stored locally in <code>~/.litrev-mcp/token.json</code>.</em></p>
+                    </li>
                 </ol>
             </section>
 
@@ -145,6 +156,10 @@ export ZOTERO_USER_ID="your-user-id-here"</code></pre>
                     <div class="prompt-box">
                         <code>Process the PDFs in my TEST project inbox</code>
                         <button class="copy-btn" data-text="Process the PDFs in my TEST project inbox">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Migrate Zotero server attachments to Google Drive for TEST</code>
+                        <button class="copy-btn" data-text="Migrate Zotero server attachments to Google Drive for TEST">Copy</button>
                     </div>
                 </div>
 
@@ -240,9 +255,9 @@ export ZOTERO_USER_ID="your-user-id-here"</code></pre>
             <!-- Tool Reference -->
             <section id="tools">
                 <h2>🛠️ Tool Reference</h2>
-                <p>All 22 MCP tools organized by category:</p>
+                <p>All 23 MCP tools organized by category:</p>
 
-                <h3>Zotero Integration (8 tools)</h3>
+                <h3>Zotero Integration (9 tools)</h3>
                 <table class="tool-table">
                     <thead>
                         <tr>
@@ -289,7 +304,12 @@ export ZOTERO_USER_ID="your-user-id-here"</code></pre>
                         </tr>
                         <tr>
                             <td><code>process_pdf_inbox</code></td>
-                            <td>Process PDFs in to_add folder, match to Zotero entries, rename and organize</td>
+                            <td>Process PDFs in to_add folder: match to Zotero entries, rename, organize, and add Google Drive links (if configured)</td>
+                            <td><code>project</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>migrate_zotero_attachments</code></td>
+                            <td>Migrate PDFs stored on Zotero's servers to Google Drive. Downloads, renames with citation key, adds Drive link, deletes original. For papers added by drag-drop.</td>
                             <td><code>project</code></td>
                         </tr>
                     </tbody>
@@ -450,9 +470,9 @@ export ZOTERO_USER_ID="your-user-id-here"</code></pre>
        │
        ▼
 ┌─────────────┐
-│  Acquire    │  YOU: Download PDF from DOI link
-│    PDF      │  Name: citation_key.pdf (e.g., carroll_measurement_2006.pdf)
-└──────┬──────┘  Save to: Literature/PROJECT/
+│  Acquire    │  YOU: Download PDF to to_add/ folder
+│    PDF      │  Run process_pdf_inbox to auto-rename
+└──────┬──────┘  + Adds Google Drive link to Zotero (if configured)
        │
        ▼
 ┌─────────────┐
