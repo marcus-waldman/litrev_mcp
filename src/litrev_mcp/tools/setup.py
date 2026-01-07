@@ -201,10 +201,12 @@ async def setup_create_project(
         # Create project directory structure
         project_dir = lit_path / code
         notes_dir = project_dir / "_notes"
+        inbox_dir = project_dir / "to_add"
 
         try:
             project_dir.mkdir(parents=True, exist_ok=True)
             notes_dir.mkdir(parents=True, exist_ok=True)
+            inbox_dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:
             return {
                 'success': False,

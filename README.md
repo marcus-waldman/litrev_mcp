@@ -10,7 +10,7 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 
 ✅ **v0.1.0 - All Core Features Implemented**
 
-- 21 tools across 6 categories
+- 22 tools across 6 categories
 - 67+ unit tests
 - Full Zotero integration
 - Search APIs (PubMed, Semantic Scholar, ERIC)
@@ -20,7 +20,7 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 
 ## Features
 
-### Zotero Integration (7 tools)
+### Zotero Integration (8 tools)
 - `zotero_list_projects` - List collections with paper counts by status
 - `zotero_create_collection` - Create a new Zotero collection
 - `zotero_add_paper` - Add papers by DOI or manual entry
@@ -28,6 +28,7 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 - `zotero_get_by_status` - Filter papers by status
 - `zotero_search` - Search your library
 - `zotero_get_citation_key` - Get Better BibTeX citation keys
+- `process_pdf_inbox` - Process PDFs in to_add folder, match to Zotero entries, rename and organize
 
 ### Literature Search (5 tools)
 - `pubmed_search` - Search PubMed for biomedical papers

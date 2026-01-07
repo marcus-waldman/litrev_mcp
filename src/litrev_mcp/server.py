@@ -48,6 +48,7 @@ from litrev_mcp.tools.setup import (
     setup_check,
     setup_create_project,
 )
+from litrev_mcp.tools.pdf import process_pdf_inbox
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -484,6 +485,21 @@ async def list_tools() -> list[Tool]:
                 "required": ["code", "name"],
             },
         ),
+        # PDF Processing tools
+        Tool(
+            name="process_pdf_inbox",
+            description="Process PDFs in a project's to_add/ folder. Matches them to existing Zotero entries, renames with citation keys, and updates status. Returns unmatched PDFs for interactive review.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {
+                        "type": "string",
+                        "description": "Project code (e.g., 'TEST')",
+                    },
+                },
+                "required": ["project"],
+            },
+        ),
     ]
 
 
@@ -641,6 +657,13 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             code=arguments.get("code"),
             name=arguments.get("name"),
             zotero_collection_key=arguments.get("zotero_collection_key"),
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    # PDF Processing tools
+    if name == "process_pdf_inbox":
+        result = await process_pdf_inbox(
+            project=arguments.get("project"),
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
