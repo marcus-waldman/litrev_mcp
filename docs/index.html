@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>litrev-mcp Reference Guide</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>litrev-mcp Reference Guide</h1>
+            <p class="subtitle">AI-Assisted Literature Review with Zotero, PubMed, and Semantic Scholar</p>
+
+            <div class="search-bar">
+                <input type="text" id="search" placeholder="Search tools, commands, or topics...">
+                <button id="theme-toggle" aria-label="Toggle dark mode">🌙</button>
+            </div>
+        </header>
+
+        <nav class="toc">
+            <h3>Contents</h3>
+            <ul>
+                <li><a href="#quick-start">Quick Start</a></li>
+                <li><a href="#messy-zotero">I Have a Messy Zotero</a></li>
+                <li><a href="#cheat-sheet">Cheat Sheet</a></li>
+                <li><a href="#tools">Tool Reference</a></li>
+                <li><a href="#workflows">Workflows</a></li>
+                <li><a href="#troubleshooting">Troubleshooting</a></li>
+            </ul>
+        </nav>
+
+        <main>
+            <!-- Quick Start -->
+            <section id="quick-start">
+                <h2>⚡ Quick Start (5 minutes)</h2>
+                <ol>
+                    <li>
+                        <strong>Install litrev-mcp</strong>
+                        <pre><code>uv tool install git+https://github.com/marcus-waldman/litrev_mcp.git</code></pre>
+                    </li>
+                    <li>
+                        <strong>Get Zotero credentials</strong>
+                        <p>Visit <a href="https://www.zotero.org/settings/keys" target="_blank">https://www.zotero.org/settings/keys</a> and create a new key with library access, notes access, and write access.</p>
+                    </li>
+                    <li>
+                        <strong>Set environment variables</strong>
+                        <pre><code># Add to ~/.bashrc or ~/.zshrc
+export ZOTERO_API_KEY="your-api-key-here"
+export ZOTERO_USER_ID="your-user-id-here"</code></pre>
+                    </li>
+                    <li>
+                        <strong>Configure Claude Code</strong>
+                        <p>Add to your Claude Code MCP config (<code>%APPDATA%\Claude\claude_desktop_config.json</code> on Windows):</p>
+                        <pre><code>{
+  "mcpServers": {
+    "litrev": {
+      "command": "litrev-mcp",
+      "args": []
+    }
+  }
+}</code></pre>
+                    </li>
+                    <li>
+                        <strong>Restart Claude Code and verify</strong>
+                        <div class="prompt-box">
+                            <code>Use litrev_hello to verify the server is working</code>
+                            <button class="copy-btn" data-text="Use litrev_hello to verify the server is working">Copy</button>
+                        </div>
+                        <div class="prompt-box">
+                            <code>Use setup_check to verify my configuration</code>
+                            <button class="copy-btn" data-text="Use setup_check to verify my configuration">Copy</button>
+                        </div>
+                    </li>
+                </ol>
+            </section>
+
+            <!-- Messy Zotero -->
+            <section id="messy-zotero">
+                <h2>📚 I Have a Messy Zotero Library</h2>
+                <p>Don't worry! Here's how to get organized:</p>
+
+                <h3>Step 1: See what you have</h3>
+                <div class="prompt-box">
+                    <code>List my Zotero collections with paper counts</code>
+                    <button class="copy-btn" data-text="List my Zotero collections with paper counts">Copy</button>
+                </div>
+                <p>This shows all your collections and how many papers are in each one.</p>
+
+                <h3>Step 2: Create a project</h3>
+                <p>Pick an existing collection or create a new one in Zotero. Then link it to a litrev project:</p>
+                <div class="prompt-box">
+                    <code>Create a new project called "Measurement Error" with code "MEAS-ERR" linked to Zotero collection ABC12345</code>
+                    <button class="copy-btn" data-text='Create a new project called "Measurement Error" with code "MEAS-ERR" linked to Zotero collection ABC12345'>Copy</button>
+                </div>
+                <p><em>Replace ABC12345 with your actual collection key from Step 1.</em></p>
+
+                <h3>Step 3: Identify gaps</h3>
+                <div class="prompt-box">
+                    <code>Show me the status of my MEAS-ERR project</code>
+                    <button class="copy-btn" data-text="Show me the status of my MEAS-ERR project">Copy</button>
+                </div>
+                <p>This shows which papers need PDFs, which need NotebookLM processing, and which are complete.</p>
+
+                <h3>Step 4: Get your action items</h3>
+                <div class="prompt-box">
+                    <code>What are all my pending actions?</code>
+                    <button class="copy-btn" data-text="What are all my pending actions?">Copy</button>
+                </div>
+                <p>This gives you a prioritized list of what to do next: PDFs to download, papers to add to NotebookLM, etc.</p>
+
+                <h3>Step 5: Find more papers</h3>
+                <p>Now that you're organized, you can systematically add new papers:</p>
+                <div class="prompt-box">
+                    <code>Search PubMed for "glucose measurement error correction"</code>
+                    <button class="copy-btn" data-text='Search PubMed for "glucose measurement error correction"'>Copy</button>
+                </div>
+                <div class="prompt-box">
+                    <code>Find papers that cite Carroll's measurement error book (DOI: 10.1201/9781420010138)</code>
+                    <button class="copy-btn" data-text="Find papers that cite Carroll's measurement error book (DOI: 10.1201/9781420010138)">Copy</button>
+                </div>
+            </section>
+
+            <!-- Cheat Sheet -->
+            <section id="cheat-sheet">
+                <h2>📋 Cheat Sheet</h2>
+                <p>Copy-paste these prompts for common tasks:</p>
+
+                <h3>Setup & Configuration</h3>
+                <div class="prompt-group">
+                    <div class="prompt-box">
+                        <code>Check my setup</code>
+                        <button class="copy-btn" data-text="Check my setup">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Create a new project called "PROJECT_NAME" with code "CODE"</code>
+                        <button class="copy-btn" data-text='Create a new project called "PROJECT_NAME" with code "CODE"'>Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>List my Zotero collections</code>
+                        <button class="copy-btn" data-text="List my Zotero collections">Copy</button>
+                    </div>
+                </div>
+
+                <h3>Finding Papers</h3>
+                <div class="prompt-group">
+                    <div class="prompt-box">
+                        <code>Search PubMed for "YOUR QUERY"</code>
+                        <button class="copy-btn" data-text='Search PubMed for "YOUR QUERY"'>Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Search Semantic Scholar for "YOUR QUERY"</code>
+                        <button class="copy-btn" data-text='Search Semantic Scholar for "YOUR QUERY"'>Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Find papers that cite DOI: YOUR_DOI</code>
+                        <button class="copy-btn" data-text="Find papers that cite DOI: YOUR_DOI">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Show me the references from DOI: YOUR_DOI</code>
+                        <button class="copy-btn" data-text="Show me the references from DOI: YOUR_DOI">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Search ERIC for "YOUR EDUCATION RESEARCH QUERY"</code>
+                        <button class="copy-btn" data-text='Search ERIC for "YOUR EDUCATION RESEARCH QUERY"'>Copy</button>
+                    </div>
+                </div>
+
+                <h3>Adding Papers</h3>
+                <div class="prompt-group">
+                    <div class="prompt-box">
+                        <code>Add this paper to PROJECT: DOI</code>
+                        <button class="copy-btn" data-text="Add this paper to PROJECT: DOI">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Add a paper manually: "Title" by Author et al (2023)</code>
+                        <button class="copy-btn" data-text='Add a paper manually: "Title" by Author et al (2023)'>Copy</button>
+                    </div>
+                </div>
+
+                <h3>Status Tracking</h3>
+                <div class="prompt-group">
+                    <div class="prompt-box">
+                        <code>Show me the status of PROJECT</code>
+                        <button class="copy-btn" data-text="Show me the status of PROJECT">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>What papers in PROJECT need PDFs?</code>
+                        <button class="copy-btn" data-text="What papers in PROJECT need PDFs?">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>What are all my pending actions?</code>
+                        <button class="copy-btn" data-text="What are all my pending actions?">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Mark ITEM_KEY as complete in PROJECT</code>
+                        <button class="copy-btn" data-text="Mark ITEM_KEY as complete in PROJECT">Copy</button>
+                    </div>
+                </div>
+
+                <h3>Knowledge Base</h3>
+                <div class="prompt-group">
+                    <div class="prompt-box">
+                        <code>Save this Consensus summary about TOPIC to PROJECT</code>
+                        <button class="copy-btn" data-text="Save this Consensus summary about TOPIC to PROJECT">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Search my insights for "KEYWORD"</code>
+                        <button class="copy-btn" data-text='Search my insights for "KEYWORD"'>Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>What have I learned about TOPIC from my saved insights?</code>
+                        <button class="copy-btn" data-text="What have I learned about TOPIC from my saved insights?">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>List all insights for PROJECT</code>
+                        <button class="copy-btn" data-text="List all insights for PROJECT">Copy</button>
+                    </div>
+                </div>
+
+                <h3>Writing Support</h3>
+                <div class="prompt-group">
+                    <div class="prompt-box">
+                        <code>Get the citation key for ITEM_KEY</code>
+                        <button class="copy-btn" data-text="Get the citation key for ITEM_KEY">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Search my PROJECT library for "KEYWORD"</code>
+                        <button class="copy-btn" data-text='Search my PROJECT library for "KEYWORD"'>Copy</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tool Reference -->
+            <section id="tools">
+                <h2>🛠️ Tool Reference</h2>
+                <p>All 20 MCP tools organized by category:</p>
+
+                <h3>Zotero Integration (6 tools)</h3>
+                <table class="tool-table">
+                    <thead>
+                        <tr>
+                            <th>Tool</th>
+                            <th>What it does</th>
+                            <th>Key Parameters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>zotero_list_projects</code></td>
+                            <td>List all Zotero collections with paper counts by status</td>
+                            <td>None</td>
+                        </tr>
+                        <tr>
+                            <td><code>zotero_add_paper</code></td>
+                            <td>Add a paper to Zotero by DOI or manual metadata</td>
+                            <td><code>project</code>, <code>doi</code> (or <code>title</code>, <code>authors</code>, <code>year</code>)</td>
+                        </tr>
+                        <tr>
+                            <td><code>zotero_update_status</code></td>
+                            <td>Change a paper's status tag</td>
+                            <td><code>project</code>, <code>item_key</code>, <code>status</code> (needs_pdf, needs_notebooklm, complete)</td>
+                        </tr>
+                        <tr>
+                            <td><code>zotero_get_by_status</code></td>
+                            <td>Get all papers with a specific status</td>
+                            <td><code>project</code>, <code>status</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>zotero_search</code></td>
+                            <td>Search your Zotero library</td>
+                            <td><code>project</code>, <code>query</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>zotero_get_citation_key</code></td>
+                            <td>Get Better BibTeX citation key for a paper</td>
+                            <td><code>project</code>, <code>item_key</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Literature Search (5 tools)</h3>
+                <table class="tool-table">
+                    <thead>
+                        <tr>
+                            <th>Tool</th>
+                            <th>What it does</th>
+                            <th>Key Parameters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>pubmed_search</code></td>
+                            <td>Search PubMed for biomedical literature</td>
+                            <td><code>query</code>, <code>max_results</code> (default: 10)</td>
+                        </tr>
+                        <tr>
+                            <td><code>semantic_scholar_search</code></td>
+                            <td>Search Semantic Scholar across all fields</td>
+                            <td><code>query</code>, <code>max_results</code> (default: 10)</td>
+                        </tr>
+                        <tr>
+                            <td><code>semantic_scholar_references</code></td>
+                            <td>Backward snowball: get papers cited BY a paper</td>
+                            <td><code>paper_id</code> (DOI, S2 ID, etc.), <code>max_results</code> (default: 50)</td>
+                        </tr>
+                        <tr>
+                            <td><code>semantic_scholar_citations</code></td>
+                            <td>Forward snowball: get papers that CITE a paper</td>
+                            <td><code>paper_id</code>, <code>max_results</code> (default: 50)</td>
+                        </tr>
+                        <tr>
+                            <td><code>eric_search</code></td>
+                            <td>Search ERIC for education research</td>
+                            <td><code>query</code>, <code>max_results</code> (default: 10)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Knowledge Base (4 tools)</h3>
+                <table class="tool-table">
+                    <thead>
+                        <tr>
+                            <th>Tool</th>
+                            <th>What it does</th>
+                            <th>Key Parameters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>save_insight</code></td>
+                            <td>Save Consensus/NotebookLM summaries or your own notes</td>
+                            <td><code>project</code>, <code>source</code> (consensus, notebooklm, synthesis, reading_notes), <code>topic</code>, <code>content</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>search_insights</code></td>
+                            <td>Search saved insights by keyword</td>
+                            <td><code>query</code>, <code>project</code> (optional), <code>source</code> (optional)</td>
+                        </tr>
+                        <tr>
+                            <td><code>analyze_insights</code></td>
+                            <td>Answer questions from saved insights (detects contradictions!)</td>
+                            <td><code>question</code>, <code>project</code> (optional)</td>
+                        </tr>
+                        <tr>
+                            <td><code>list_insights</code></td>
+                            <td>List all insights for a project</td>
+                            <td><code>project</code>, <code>source</code> (optional)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Status & Dashboard (2 tools)</h3>
+                <table class="tool-table">
+                    <thead>
+                        <tr>
+                            <th>Tool</th>
+                            <th>What it does</th>
+                            <th>Key Parameters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>project_status</code></td>
+                            <td>Get comprehensive project dashboard</td>
+                            <td><code>project</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>pending_actions</code></td>
+                            <td>Get all pending user actions (PDFs to get, papers for NotebookLM)</td>
+                            <td>None</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Setup Wizard (2 tools)</h3>
+                <table class="tool-table">
+                    <thead>
+                        <tr>
+                            <th>Tool</th>
+                            <th>What it does</th>
+                            <th>Key Parameters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>setup_check</code></td>
+                            <td>Verify configuration (Google Drive, Zotero credentials)</td>
+                            <td>None</td>
+                        </tr>
+                        <tr>
+                            <td><code>setup_create_project</code></td>
+                            <td>Create new project with directory structure</td>
+                            <td><code>code</code>, <code>name</code>, <code>zotero_collection_key</code> (optional)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Test Tool (1 tool)</h3>
+                <table class="tool-table">
+                    <thead>
+                        <tr>
+                            <th>Tool</th>
+                            <th>What it does</th>
+                            <th>Key Parameters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>litrev_hello</code></td>
+                            <td>Verify litrev-mcp is working</td>
+                            <td>None</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Workflows -->
+            <section id="workflows">
+                <h2>🔄 Workflows</h2>
+
+                <h3>Paper Lifecycle</h3>
+                <pre class="workflow-diagram">
+┌─────────────┐
+│   Search    │  PubMed, Semantic Scholar, ERIC, Consensus
+│  Databases  │  Citation snowballing (forward/backward)
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│ Add to      │  By DOI or manual entry
+│ Zotero      │  Tagged: _needs-pdf
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│  Acquire    │  YOU: Download PDF from DOI link
+│    PDF      │  Name: citation_key.pdf (e.g., carroll_measurement_2006.pdf)
+└──────┬──────┘  Save to: Literature/PROJECT/
+       │
+       ▼
+┌─────────────┐
+│   Update    │  Change tag: _needs-notebooklm
+│   Status    │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│ Add to      │  YOU: Upload PDF to NotebookLM
+│ NotebookLM  │  Get AI summaries and Q&A
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│    Save     │  Save NotebookLM insights
+│  Insights   │  Stored in _notes/ folder
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│   Mark      │  Change tag: _complete
+│  Complete   │  Ready for synthesis
+└─────────────┘
+                </pre>
+
+                <h3>Citation Snowballing</h3>
+                <pre class="workflow-diagram">
+Start with a key paper
+        │
+        ├─────────────────────────┐
+        │                         │
+        ▼                         ▼
+┌──────────────┐         ┌──────────────┐
+│  Backward    │         │   Forward    │
+│  Snowball    │         │  Snowball    │
+│              │         │              │
+│ Papers cited │         │ Papers that  │
+│  BY this     │         │  CITE this   │
+└──────┬───────┘         └───────┬──────┘
+       │                         │
+       └──────────┬──────────────┘
+                  ▼
+          Filter & Add to Zotero
+                  │
+                  ▼
+          Repeat for new papers
+                </pre>
+
+                <h3>Knowledge Synthesis</h3>
+                <pre class="workflow-diagram">
+┌──────────────┐
+│   Consensus  │  YOU: Search Consensus.app
+│    Search    │  Copy summary
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│ Save Insight │  Save to project _notes/
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│  NotebookLM  │  YOU: Upload PDFs
+│   Analysis   │  Get AI analysis
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│ Save Insight │  Save to project _notes/
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│   Analyze    │  "What have I learned about X?"
+│   Insights   │  Detects contradictions between sources!
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│  Synthesis   │  Write your own synthesis notes
+│    Notes     │  Save to project _notes/
+└──────────────┘
+                </pre>
+
+                <h3>Common Scenarios</h3>
+
+                <details>
+                    <summary><strong>Starting a new literature review</strong></summary>
+                    <ol>
+                        <li>Create project and link to Zotero collection</li>
+                        <li>Search PubMed/Semantic Scholar for key terms</li>
+                        <li>Add 5-10 foundational papers by DOI</li>
+                        <li>Citation snowball from 2-3 most relevant papers</li>
+                        <li>Review pending actions to prioritize PDF acquisition</li>
+                    </ol>
+                </details>
+
+                <details>
+                    <summary><strong>Organizing existing papers</strong></summary>
+                    <ol>
+                        <li>List Zotero collections to see what you have</li>
+                        <li>Create project linked to most relevant collection</li>
+                        <li>Check project status to identify gaps (missing PDFs)</li>
+                        <li>Get pending actions for prioritized task list</li>
+                        <li>Work through actions systematically</li>
+                    </ol>
+                </details>
+
+                <details>
+                    <summary><strong>Writing a paper</strong></summary>
+                    <ol>
+                        <li>Search insights for key concepts: "What have I learned about SIMEX?"</li>
+                        <li>Analyze insights to find contradictions or gaps</li>
+                        <li>Get citation keys for papers you want to cite</li>
+                        <li>Search Zotero library for specific claims or methods</li>
+                        <li>Write synthesis notes as you draft sections</li>
+                    </ol>
+                </details>
+
+                <details>
+                    <summary><strong>Deep diving on a topic</strong></summary>
+                    <ol>
+                        <li>Search Consensus for high-level synthesis</li>
+                        <li>Save Consensus summary as insight</li>
+                        <li>Extract key papers from Consensus results</li>
+                        <li>Add papers to Zotero, get PDFs</li>
+                        <li>Upload PDFs to NotebookLM for detailed analysis</li>
+                        <li>Save NotebookLM insights</li>
+                        <li>Use analyze_insights to synthesize across sources</li>
+                    </ol>
+                </details>
+            </section>
+
+            <!-- Troubleshooting -->
+            <section id="troubleshooting">
+                <h2>🔧 Troubleshooting</h2>
+
+                <h3>Server not responding</h3>
+                <p><strong>Problem:</strong> Claude Code doesn't show litrev-mcp tools</p>
+                <p><strong>Solutions:</strong></p>
+                <ol>
+                    <li>Verify installation: <code>which litrev-mcp</code> (should show path)</li>
+                    <li>Check Claude Code MCP config is correct (see Quick Start)</li>
+                    <li>Restart Claude Code completely</li>
+                    <li>Test server directly: <code>python -m litrev_mcp.server</code></li>
+                </ol>
+
+                <h3>Google Drive path not detected</h3>
+                <p><strong>Problem:</strong> "Google Drive path not detected" error</p>
+                <p><strong>Solutions:</strong></p>
+                <ol>
+                    <li>Set environment variable: <code>export LITREV_DRIVE_PATH="/path/to/Google Drive"</code></li>
+                    <li>On Windows, try: <code>G:\My Drive</code></li>
+                    <li>On Mac, try: <code>~/Library/CloudStorage/GoogleDrive-*/My Drive</code></li>
+                    <li>Ensure Google Drive is syncing and mounted</li>
+                </ol>
+
+                <h3>Zotero credentials not working</h3>
+                <p><strong>Problem:</strong> "ZOTERO_API_KEY not set" or authentication errors</p>
+                <p><strong>Solutions:</strong></p>
+                <ol>
+                    <li>Verify variables are set: <code>echo $ZOTERO_API_KEY</code></li>
+                    <li>Check you added them to the right shell config (<code>~/.bashrc</code>, <code>~/.zshrc</code>)</li>
+                    <li>Reload shell: <code>source ~/.bashrc</code></li>
+                    <li>Verify key has correct permissions (library access, write access)</li>
+                    <li>Try creating a new API key at <a href="https://www.zotero.org/settings/keys" target="_blank">Zotero settings</a></li>
+                </ol>
+
+                <h3>Project not found</h3>
+                <p><strong>Problem:</strong> "Project 'XYZ' not found" error</p>
+                <p><strong>Solutions:</strong></p>
+                <ol>
+                    <li>Check project code is correct (case-sensitive)</li>
+                    <li>List projects: "List my projects"</li>
+                    <li>Create project if needed: "Create a new project..."</li>
+                    <li>Verify <code>Literature/.litrev/config.yaml</code> exists</li>
+                </ol>
+
+                <h3>Papers not showing status tags</h3>
+                <p><strong>Problem:</strong> Papers in Zotero don't have _needs-pdf tags</p>
+                <p><strong>Solutions:</strong></p>
+                <ol>
+                    <li>Status tags are only applied to NEW papers added via litrev-mcp</li>
+                    <li>For existing papers, manually add tags in Zotero</li>
+                    <li>Or re-add them via litrev-mcp using their DOIs</li>
+                    <li>Check config.yaml has correct status_tags defined</li>
+                </ol>
+
+                <h3>Can't find citation key</h3>
+                <p><strong>Problem:</strong> "Citation key not found" or getting generic keys</p>
+                <p><strong>Solutions:</strong></p>
+                <ol>
+                    <li>Ensure Better BibTeX plugin is installed in Zotero</li>
+                    <li>Check BBT settings for citation key pattern</li>
+                    <li>Refresh citation keys in Zotero (right-click → Better BibTeX → Refresh)</li>
+                    <li>Wait a moment for BBT to generate keys for new papers</li>
+                </ol>
+
+                <h3>Rate limit errors</h3>
+                <p><strong>Problem:</strong> "Rate limit exceeded" when searching</p>
+                <p><strong>Solutions:</strong></p>
+                <ul>
+                    <li><strong>PubMed:</strong> Get free API key from <a href="https://www.ncbi.nlm.nih.gov/account/" target="_blank">NCBI</a> (increases limit from 3/sec to 10/sec)</li>
+                    <li><strong>Semantic Scholar:</strong> Get free API key from <a href="https://www.semanticscholar.org/product/api" target="_blank">Semantic Scholar</a> (increases limit from 100/5min to 5000/5min)</li>
+                    <li>Add keys to environment: <code>export NCBI_API_KEY="..." SEMANTIC_SCHOLAR_API_KEY="..."</code></li>
+                    <li>Wait a few minutes and try again</li>
+                </ul>
+            </section>
+
+            <footer>
+                <p>Built with litrev-mcp v0.1.0 | <a href="https://github.com/marcus-waldman/litrev_mcp" target="_blank">GitHub</a></p>
+            </footer>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
