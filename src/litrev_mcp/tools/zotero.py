@@ -3,6 +3,7 @@ Zotero operations for litrev-mcp.
 
 Implements tools for interacting with Zotero library:
 - zotero_list_projects: List collections with paper counts
+- zotero_create_collection: Create a new Zotero collection
 - zotero_add_paper: Add paper by DOI or manual entry
 - zotero_update_status: Change status tags
 - zotero_get_by_status: Filter papers by status
@@ -186,6 +187,57 @@ async def zotero_list_projects() -> dict[str, Any]:
             })
 
         return {'success': True, 'projects': projects}
+
+    except ZoteroAuthError as e:
+        return {'success': False, 'error': {'code': 'ZOTERO_AUTH_FAILED', 'message': str(e)}}
+    except Exception as e:
+        return {'success': False, 'error': {'code': 'ZOTERO_ERROR', 'message': str(e)}}
+
+
+async def zotero_create_collection(
+    name: str,
+    parent_key: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Create a new Zotero collection.
+
+    Args:
+        name: Name for the new collection
+        parent_key: Parent collection key for nested collections (optional)
+
+    Returns:
+        Dictionary with collection key and details.
+    """
+    try:
+        zot = get_zotero_client()
+
+        # Build collection data
+        collection_data = {"name": name}
+        if parent_key:
+            collection_data["parentCollection"] = parent_key
+
+        # Create the collection
+        resp = zot.create_collections([collection_data])
+
+        if resp.get('successful'):
+            created = list(resp['successful'].values())[0]
+            coll_key = created.get('key')
+            coll_data = created.get('data', {})
+
+            return {
+                'success': True,
+                'collection_key': coll_key,
+                'name': coll_data.get('name', name),
+                'parent_key': coll_data.get('parentCollection'),
+                'message': f"Collection '{name}' created. Use this key to link to a project.",
+            }
+        else:
+            failed = resp.get('failed', {})
+            error_msg = str(failed) if failed else "Unknown error creating collection"
+            return {
+                'success': False,
+                'error': {'code': 'ZOTERO_CREATE_FAILED', 'message': error_msg}
+            }
 
     except ZoteroAuthError as e:
         return {'success': False, 'error': {'code': 'ZOTERO_AUTH_FAILED', 'message': str(e)}}

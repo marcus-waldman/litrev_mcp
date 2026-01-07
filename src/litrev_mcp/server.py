@@ -20,6 +20,7 @@ from litrev_mcp.config import (
 )
 from litrev_mcp.tools.zotero import (
     zotero_list_projects,
+    zotero_create_collection,
     zotero_add_paper,
     zotero_update_status,
     zotero_get_by_status,
@@ -77,6 +78,24 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {},
                 "required": [],
+            },
+        ),
+        Tool(
+            name="zotero_create_collection",
+            description="Create a new Zotero collection. Returns the collection key to link with a project.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Name for the new collection",
+                    },
+                    "parent_key": {
+                        "type": "string",
+                        "description": "Parent collection key for nested collections (optional)",
+                    },
+                },
+                "required": ["name"],
             },
         ),
         Tool(
@@ -478,6 +497,13 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     # Zotero tools
     if name == "zotero_list_projects":
         result = await zotero_list_projects()
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "zotero_create_collection":
+        result = await zotero_create_collection(
+            name=arguments.get("name"),
+            parent_key=arguments.get("parent_key"),
+        )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
     if name == "zotero_add_paper":

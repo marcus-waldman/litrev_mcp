@@ -10,7 +10,7 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 
 ✅ **v0.1.0 - All Core Features Implemented**
 
-- 20 tools across 6 categories
+- 21 tools across 6 categories
 - 67+ unit tests
 - Full Zotero integration
 - Search APIs (PubMed, Semantic Scholar, ERIC)
@@ -20,8 +20,9 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 
 ## Features
 
-### Zotero Integration (6 tools)
+### Zotero Integration (7 tools)
 - `zotero_list_projects` - List collections with paper counts by status
+- `zotero_create_collection` - Create a new Zotero collection
 - `zotero_add_paper` - Add papers by DOI or manual entry
 - `zotero_update_status` - Change status tags (_needs-pdf, _needs-notebooklm, _complete)
 - `zotero_get_by_status` - Filter papers by status
@@ -122,24 +123,11 @@ Reload your shell: `source ~/.bashrc`
 
 ### 3. Configure Claude Code
 
-Add to your Claude Code MCP configuration file:
+Add the MCP server to Claude Code:
 
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-**Linux**: `~/.config/Claude/claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "litrev": {
-      "command": "litrev-mcp",
-      "args": []
-    }
-  }
-}
+```bash
+claude mcp add litrev -- litrev-mcp
 ```
-
-Restart Claude Code.
 
 ### 4. Verify Setup
 

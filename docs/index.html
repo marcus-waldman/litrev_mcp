@@ -51,15 +51,8 @@ export ZOTERO_USER_ID="your-user-id-here"</code></pre>
                     </li>
                     <li>
                         <strong>Configure Claude Code</strong>
-                        <p>Add to your Claude Code MCP config (<code>%APPDATA%\Claude\claude_desktop_config.json</code> on Windows):</p>
-                        <pre><code>{
-  "mcpServers": {
-    "litrev": {
-      "command": "litrev-mcp",
-      "args": []
-    }
-  }
-}</code></pre>
+                        <p>Add the MCP server to Claude Code:</p>
+                        <pre><code>claude mcp add litrev -- litrev-mcp</code></pre>
                     </li>
                     <li>
                         <strong>Restart Claude Code and verify</strong>
@@ -88,12 +81,17 @@ export ZOTERO_USER_ID="your-user-id-here"</code></pre>
                 <p>This shows all your collections and how many papers are in each one.</p>
 
                 <h3>Step 2: Create a project</h3>
-                <p>Pick an existing collection or create a new one in Zotero. Then link it to a litrev project:</p>
+                <p>You can either pick an existing collection or create a new one:</p>
+                <div class="prompt-box">
+                    <code>Create a new Zotero collection called "Measurement Error"</code>
+                    <button class="copy-btn" data-text='Create a new Zotero collection called "Measurement Error"'>Copy</button>
+                </div>
+                <p>Then link it to a litrev project:</p>
                 <div class="prompt-box">
                     <code>Create a new project called "Measurement Error" with code "MEAS-ERR" linked to Zotero collection ABC12345</code>
                     <button class="copy-btn" data-text='Create a new project called "Measurement Error" with code "MEAS-ERR" linked to Zotero collection ABC12345'>Copy</button>
                 </div>
-                <p><em>Replace ABC12345 with your actual collection key from Step 1.</em></p>
+                <p><em>Replace ABC12345 with your collection key from creating or Step 1.</em></p>
 
                 <h3>Step 3: Identify gaps</h3>
                 <div class="prompt-box">
@@ -131,6 +129,10 @@ export ZOTERO_USER_ID="your-user-id-here"</code></pre>
                     <div class="prompt-box">
                         <code>Check my setup</code>
                         <button class="copy-btn" data-text="Check my setup">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Create a new Zotero collection called "COLLECTION_NAME"</code>
+                        <button class="copy-btn" data-text='Create a new Zotero collection called "COLLECTION_NAME"'>Copy</button>
                     </div>
                     <div class="prompt-box">
                         <code>Create a new project called "PROJECT_NAME" with code "CODE"</code>
@@ -234,9 +236,9 @@ export ZOTERO_USER_ID="your-user-id-here"</code></pre>
             <!-- Tool Reference -->
             <section id="tools">
                 <h2>🛠️ Tool Reference</h2>
-                <p>All 20 MCP tools organized by category:</p>
+                <p>All 21 MCP tools organized by category:</p>
 
-                <h3>Zotero Integration (6 tools)</h3>
+                <h3>Zotero Integration (7 tools)</h3>
                 <table class="tool-table">
                     <thead>
                         <tr>
@@ -250,6 +252,11 @@ export ZOTERO_USER_ID="your-user-id-here"</code></pre>
                             <td><code>zotero_list_projects</code></td>
                             <td>List all Zotero collections with paper counts by status</td>
                             <td>None</td>
+                        </tr>
+                        <tr>
+                            <td><code>zotero_create_collection</code></td>
+                            <td>Create a new Zotero collection</td>
+                            <td><code>name</code>, <code>parent_key</code> (optional)</td>
                         </tr>
                         <tr>
                             <td><code>zotero_add_paper</code></td>
