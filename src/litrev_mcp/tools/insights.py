@@ -16,6 +16,91 @@ import yaml
 from litrev_mcp.config import config_manager
 
 
+def extract_dois_from_content(content: str) -> list[str]:
+    """Extract DOIs from text content (e.g., Consensus output)."""
+    # Match DOI patterns:
+    # - https://doi.org/10.xxxx/yyyy
+    # - doi.org/10.xxxx/yyyy
+    # - 10.xxxx/yyyy (bare DOI)
+    doi_pattern = r'(?:https?://)?(?:doi\.org/|dx\.doi\.org/)?(10\.\d{4,}/[^\s\)\]\"\'>,]+)'
+
+    matches = re.findall(doi_pattern, content, re.IGNORECASE)
+
+    # Clean up DOIs (remove trailing punctuation)
+    cleaned = []
+    for doi in matches:
+        # Remove trailing punctuation that might have been captured
+        doi = re.sub(r'[.,;:\)\]]+$', '', doi)
+        if doi not in cleaned:
+            cleaned.append(doi)
+
+    return cleaned
+
+
+async def fetch_crossref_metadata(doi: str) -> Optional[dict[str, Any]]:
+    """
+    Fetch metadata from CrossRef API for a DOI.
+
+    Returns dict with title, authors, year, journal or None if not found.
+    """
+    import httpx
+
+    url = f"https://api.crossref.org/works/{doi}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                url,
+                headers={"User-Agent": "litrev-mcp/0.1.0 (mailto:litrev@example.com)"}
+            )
+
+            if response.status_code != 200:
+                return None
+
+            data = response.json()
+            work = data.get("message", {})
+
+            # Extract title
+            titles = work.get("title", [])
+            title = titles[0] if titles else None
+
+            # Extract authors
+            authors_list = work.get("author", [])
+            if authors_list:
+                author_names = []
+                for author in authors_list[:3]:  # First 3 authors
+                    if author.get("family"):
+                        author_names.append(author["family"])
+                    elif author.get("name"):
+                        author_names.append(author["name"])
+
+                if len(authors_list) > 3:
+                    authors = ", ".join(author_names) + " et al."
+                else:
+                    authors = ", ".join(author_names)
+            else:
+                authors = None
+
+            # Extract year
+            date_parts = work.get("published-print", work.get("published-online", {}))
+            date_list = date_parts.get("date-parts", [[]])
+            year = date_list[0][0] if date_list and date_list[0] else None
+
+            # Extract journal
+            container = work.get("container-title", [])
+            journal = container[0] if container else None
+
+            return {
+                "title": title,
+                "authors": authors,
+                "year": year,
+                "journal": journal,
+            }
+
+    except Exception:
+        return None
+
+
 def sanitize_filename(text: str) -> str:
     """Convert text to safe filename component."""
     # Remove special characters, keep alphanumeric, dash, underscore
@@ -73,6 +158,7 @@ async def save_insight(
     content: str,
     query: Optional[str] = None,
     papers_referenced: Optional[list[str]] = None,
+    add_references_to_zotero: bool = False,
 ) -> dict[str, Any]:
     """
     Save a Consensus summary, NotebookLM answer, or synthesis note.
@@ -84,6 +170,7 @@ async def save_insight(
         content: The actual content to save
         query: Original question that prompted this (optional)
         papers_referenced: List of citation keys mentioned (optional)
+        add_references_to_zotero: If True, extract DOIs and add to Zotero (default False)
 
     Returns:
         Dictionary with filepath and success status.
@@ -153,11 +240,18 @@ async def save_insight(
 
         filepath.write_text(file_content, encoding='utf-8')
 
-        return {
+        result = {
             'success': True,
             'filepath': str(filepath),
             'message': f"Saved insight to {project} notes",
         }
+
+        # Optionally add references to Zotero
+        if add_references_to_zotero:
+            zotero_result = await _add_references_to_zotero(content, project, config)
+            result['zotero_import'] = zotero_result
+
+        return result
 
     except Exception as e:
         return {
@@ -167,6 +261,108 @@ async def save_insight(
                 'message': str(e),
             }
         }
+
+
+async def _add_references_to_zotero(content: str, project: str, config) -> dict[str, Any]:
+    """
+    Extract DOIs from content, fetch metadata from CrossRef, and add new ones to Zotero.
+
+    Returns summary of what was added/skipped.
+    """
+    from litrev_mcp.tools.zotero import get_zotero_client, zotero_add_paper
+
+    # Extract DOIs from content
+    dois = extract_dois_from_content(content)
+
+    if not dois:
+        return {
+            'dois_found': 0,
+            'added': [],
+            'skipped': [],
+            'errors': [],
+        }
+
+    # Get Zotero client and existing items in collection
+    zot = get_zotero_client()
+    proj_config = config.projects[project]
+    collection_key = proj_config.zotero_collection_key
+
+    if not collection_key:
+        return {
+            'dois_found': len(dois),
+            'added': [],
+            'skipped': [],
+            'errors': [{'doi': 'all', 'error': 'No Zotero collection configured for project'}],
+        }
+
+    # Get existing DOIs in collection
+    existing_items = zot.collection_items(collection_key, itemType='-attachment')
+    existing_dois = set()
+    for item in existing_items:
+        item_doi = item.get('data', {}).get('DOI', '')
+        if item_doi:
+            # Normalize DOI (lowercase, strip whitespace)
+            existing_dois.add(item_doi.lower().strip())
+
+    added = []
+    skipped = []
+    errors = []
+
+    for doi in dois:
+        doi_normalized = doi.lower().strip()
+
+        # Check if already exists
+        if doi_normalized in existing_dois:
+            skipped.append({'doi': doi, 'reason': 'Already in Zotero'})
+            continue
+
+        # Fetch metadata from CrossRef
+        metadata = await fetch_crossref_metadata(doi)
+
+        # Add to Zotero with metadata
+        try:
+            if metadata and metadata.get('title'):
+                # Use CrossRef metadata
+                add_result = await zotero_add_paper(
+                    project=project,
+                    doi=doi,
+                    title=metadata.get('title'),
+                    authors=metadata.get('authors'),
+                    year=metadata.get('year'),
+                    source='Consensus',
+                )
+            else:
+                # Fallback to DOI-only if CrossRef fails
+                add_result = await zotero_add_paper(
+                    project=project,
+                    doi=doi,
+                    source='Consensus',
+                )
+
+            if add_result.get('success'):
+                added.append({
+                    'doi': doi,
+                    'item_key': add_result.get('item_key'),
+                    'title': add_result.get('title'),
+                    'authors': metadata.get('authors') if metadata else None,
+                    'year': metadata.get('year') if metadata else None,
+                })
+                # Add to existing set to avoid duplicates within same batch
+                existing_dois.add(doi_normalized)
+            else:
+                errors.append({
+                    'doi': doi,
+                    'error': add_result.get('error', {}).get('message', 'Unknown error'),
+                })
+        except Exception as e:
+            errors.append({'doi': doi, 'error': str(e)})
+
+    return {
+        'dois_found': len(dois),
+        'added': added,
+        'skipped': skipped,
+        'errors': errors,
+    }
 
 
 async def search_insights(

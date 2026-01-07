@@ -226,6 +226,10 @@ export ZOTERO_USER_ID="your-user-id-here"</code></pre>
                         <button class="copy-btn" data-text="Save this Consensus summary about TOPIC to PROJECT">Copy</button>
                     </div>
                     <div class="prompt-box">
+                        <code>Save this Consensus summary to PROJECT and add the references to Zotero</code>
+                        <button class="copy-btn" data-text="Save this Consensus summary to PROJECT and add the references to Zotero">Copy</button>
+                    </div>
+                    <div class="prompt-box">
                         <code>Search my insights for "KEYWORD"</code>
                         <button class="copy-btn" data-text='Search my insights for "KEYWORD"'>Copy</button>
                     </div>
@@ -365,8 +369,8 @@ export ZOTERO_USER_ID="your-user-id-here"</code></pre>
                     <tbody>
                         <tr>
                             <td><code>save_insight</code></td>
-                            <td>Save Consensus/NotebookLM summaries or your own notes</td>
-                            <td><code>project</code>, <code>source</code> (consensus, notebooklm, synthesis, reading_notes), <code>topic</code>, <code>content</code></td>
+                            <td>Save Consensus/NotebookLM summaries; optionally extract DOIs and add papers to Zotero (with CrossRef metadata lookup)</td>
+                            <td><code>project</code>, <code>source</code>, <code>topic</code>, <code>content</code>, <code>add_references_to_zotero</code> (optional)</td>
                         </tr>
                         <tr>
                             <td><code>search_insights</code></td>

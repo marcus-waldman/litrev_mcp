@@ -39,7 +39,7 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 - `eric_search` - Search ERIC for education research
 
 ### Knowledge Base (4 tools)
-- `save_insight` - Save Consensus/NotebookLM summaries and notes
+- `save_insight` - Save Consensus/NotebookLM summaries and notes; optionally extract DOIs and add papers to Zotero (with CrossRef metadata)
 - `search_insights` - Search saved insights by keyword
 - `analyze_insights` - Answer questions from saved insights
 - `list_insights` - List all insights for a project

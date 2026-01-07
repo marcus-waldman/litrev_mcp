@@ -324,7 +324,7 @@ async def list_tools() -> list[Tool]:
         # Insights tools
         Tool(
             name="save_insight",
-            description="Save a Consensus summary, NotebookLM answer, or synthesis note to the project's knowledge base.",
+            description="Save a Consensus summary, NotebookLM answer, or synthesis note to the project's knowledge base. Can optionally extract DOIs and add referenced papers to Zotero.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -353,6 +353,11 @@ async def list_tools() -> list[Tool]:
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "List of citation keys mentioned (optional)",
+                    },
+                    "add_references_to_zotero": {
+                        "type": "boolean",
+                        "description": "If true, extract DOIs from content and add new papers to Zotero (default false)",
+                        "default": False,
                     },
                 },
                 "required": ["project", "source", "topic", "content"],
@@ -623,6 +628,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             content=arguments.get("content"),
             query=arguments.get("query"),
             papers_referenced=arguments.get("papers_referenced"),
+            add_references_to_zotero=arguments.get("add_references_to_zotero", False),
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
