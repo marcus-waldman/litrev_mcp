@@ -171,6 +171,94 @@ To find your Google Drive location, right-click the Google Drive icon in your sy
 
 **Important:** After setting up on a new machine, you'll need to run `index_papers` again to rebuild the RAG index.
 
+### Environment Variables Setup
+
+⚠️ **CRITICAL:** The three API keys below must be set as **persistent system/user environment variables** (not just in your shell). The MCP server runs as a separate process and cannot access shell-only variables.
+
+**Required:**
+- `ZOTERO_API_KEY` - Your Zotero API key (from https://www.zotero.org/settings/keys)
+- `ZOTERO_USER_ID` - Your numeric Zotero User ID (from same page)
+- `OPENAI_API_KEY` - Your OpenAI API key (from https://platform.openai.com/api-keys)
+
+**Optional:**
+- `NCBI_API_KEY` - For higher PubMed rate limits
+- `SEMANTIC_SCHOLAR_API_KEY` - For higher Semantic Scholar rate limits
+- `LITREV_DRIVE_PATH` - Override Google Drive auto-detection (useful on Windows)
+
+#### Setting Environment Variables
+
+<details>
+<summary><b>Windows (PowerShell)</b></summary>
+
+Open PowerShell as Administrator and run:
+
+```powershell
+[Environment]::SetEnvironmentVariable("ZOTERO_API_KEY", "your-api-key-here", "User")
+[Environment]::SetEnvironmentVariable("ZOTERO_USER_ID", "your-numeric-id", "User")
+[Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "your-openai-key", "User")
+```
+
+**Verify:**
+- Close all terminals and Claude Code
+- Open a NEW PowerShell window
+- Run: `$env:ZOTERO_API_KEY` - should show your key
+
+If you're using Git Bash, you can also set them in `~/.bashrc`:
+```bash
+export ZOTERO_API_KEY="your-api-key-here"
+export ZOTERO_USER_ID="your-numeric-id"
+export OPENAI_API_KEY="your-openai-key"
+```
+Then close and reopen your terminal.
+
+</details>
+
+<details>
+<summary><b>macOS</b></summary>
+
+Add to your shell config file (`~/.zshrc` for newer macOS, `~/.bash_profile` for older):
+
+```bash
+export ZOTERO_API_KEY="your-api-key-here"
+export ZOTERO_USER_ID="your-numeric-id"
+export OPENAI_API_KEY="your-openai-key"
+```
+
+Then:
+```bash
+source ~/.zshrc  # or ~/.bash_profile
+# OR restart your terminal
+```
+
+**Verify:**
+- Open a NEW terminal
+- Run: `echo $ZOTERO_API_KEY` - should show your key
+
+</details>
+
+<details>
+<summary><b>Linux</b></summary>
+
+Add to your shell config file (`~/.bashrc` or `~/.zshrc`):
+
+```bash
+export ZOTERO_API_KEY="your-api-key-here"
+export ZOTERO_USER_ID="your-numeric-id"
+export OPENAI_API_KEY="your-openai-key"
+```
+
+Then:
+```bash
+source ~/.bashrc  # or ~/.zshrc
+# OR restart your terminal
+```
+
+**Verify:**
+- Open a NEW terminal
+- Run: `echo $ZOTERO_API_KEY` - should show your key
+
+</details>
+
 ## Installation
 
 ### Quick Start
@@ -204,67 +292,14 @@ pytest
 
 ## Configuration
 
-### 1. Get Zotero Credentials
+### 1. Set Environment Variables
 
-Visit https://www.zotero.org/settings/keys and create a new private key with:
-- ✓ Allow library access
-- ✓ Allow notes access
-- ✓ Allow write access
+⚠️ See the **[Environment Variables Setup](#environment-variables-setup)** section above for detailed platform-specific instructions. You need to set:
+- `ZOTERO_API_KEY`
+- `ZOTERO_USER_ID` (numeric)
+- `OPENAI_API_KEY` (for RAG features)
 
-Copy both your **API Key** and **User ID**.
-
-### 2. Set Environment Variables
-
-Add to your shell configuration (`~/.bashrc`, `~/.zshrc`, or `~/.bash_profile`):
-
-```bash
-# Required for all features
-export ZOTERO_API_KEY="your-api-key-here"         # From https://www.zotero.org/settings/keys
-export ZOTERO_USER_ID="your-user-id-here"        # Numeric ID from same page
-
-# Required for RAG features (index_papers, search_papers, ask_papers)
-export OPENAI_API_KEY="your-openai-key"  # Get from https://platform.openai.com/api-keys
-
-# Optional - improves rate limits
-export NCBI_API_KEY="your-ncbi-key"           # Get from https://www.ncbi.nlm.nih.gov/account/
-export SEMANTIC_SCHOLAR_API_KEY="your-s2-key"  # Get from https://www.semanticscholar.org/product/api
-
-# Optional - override Google Drive detection (Windows users especially)
-export LITREV_DRIVE_PATH="/path/to/your/Google Drive"
-```
-
-**Reload your shell configuration:**
-
-<details>
-<summary><b>bash</b> (most Linux, older macOS)</summary>
-
-```bash
-source ~/.bashrc
-# OR restart your terminal
-```
-</details>
-
-<details>
-<summary><b>zsh</b> (newer macOS, some Linux)</summary>
-
-```bash
-source ~/.zshrc
-# OR restart your terminal
-```
-</details>
-
-<details>
-<summary><b>Windows Git Bash / MSYS</b></summary>
-
-```bash
-source ~/.bashrc
-# OR restart your terminal
-```
-</details>
-
-**Verify:** Open a NEW terminal and run `echo $ZOTERO_API_KEY` - it should show your key.
-
-### 3. Configure Claude Code
+### 2. Configure Claude Code
 
 Add the MCP server to Claude Code:
 
@@ -274,14 +309,14 @@ claude mcp add litrev -- litrev-mcp
 
 **Important:** You need to run this command **in every repository** where you want to use litrev-mcp. MCP servers are registered per-project. After the first setup, just navigate to each new project directory and run the same command.
 
-### 4. Verify Setup
+### 3. Verify Setup
 
 In Claude Code:
 ```
 > Use setup_check to verify my configuration
 ```
 
-### 5. Install Skill (Optional)
+### 4. Install Skill (Optional)
 
 Copy the `/init-litrev-context` skill to your global Claude skills folder for collaborative project context setup:
 

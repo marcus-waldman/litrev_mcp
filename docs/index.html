@@ -125,36 +125,66 @@
                 <pre><code>uv tool install git+https://github.com/marcus-waldman/litrev_mcp.git</code></pre>
 
                 <h3>2. Set Environment Variables</h3>
-                <p>Add to your shell configuration (<code>~/.bashrc</code>, <code>~/.zshrc</code>, etc):</p>
+                <p style="background: #fff3cd; padding: 12px; border-left: 4px solid #ffc107; margin: 12px 0;">
+                    <strong>⚠️ CRITICAL:</strong> The three API keys below must be set as <strong>persistent system/user environment variables</strong> (not just shell-level). The MCP server runs as a separate process and cannot access shell-only variables.
+                </p>
 
-                <pre><code># Required for all features
-export ZOTERO_API_KEY="your-api-key-here"         # From https://www.zotero.org/settings/keys
-export ZOTERO_USER_ID="your-user-id-here"        # Numeric ID from same page
+                <p><strong>Required:</strong></p>
+                <ul>
+                    <li><code>ZOTERO_API_KEY</code> - From <a href="https://www.zotero.org/settings/keys" target="_blank">https://www.zotero.org/settings/keys</a></li>
+                    <li><code>ZOTERO_USER_ID</code> - Numeric User ID from same page</li>
+                    <li><code>OPENAI_API_KEY</code> - From <a href="https://platform.openai.com/api-keys" target="_blank">https://platform.openai.com/api-keys</a></li>
+                </ul>
 
-# Required for RAG features (index_papers, search_papers, ask_papers)
-export OPENAI_API_KEY="your-openai-key"  # Get from https://platform.openai.com/api-keys
+                <p><strong>Optional:</strong></p>
+                <ul>
+                    <li><code>NCBI_API_KEY</code> - Higher PubMed rate limits</li>
+                    <li><code>SEMANTIC_SCHOLAR_API_KEY</code> - Higher Semantic Scholar rate limits</li>
+                    <li><code>LITREV_DRIVE_PATH</code> - Override Google Drive detection (Windows)</li>
+                </ul>
 
-# Optional - improves rate limits
-export NCBI_API_KEY="your-ncbi-key"           # Get from https://www.ncbi.nlm.nih.gov/account/
-export SEMANTIC_SCHOLAR_API_KEY="your-s2-key"  # Get from https://www.semanticscholar.org/product/api
+                <h4>Windows (PowerShell) - Recommended:</h4>
+                <p>Open PowerShell as Administrator and run:</p>
+                <pre><code>[Environment]::SetEnvironmentVariable("ZOTERO_API_KEY", "your-api-key-here", "User")
+[Environment]::SetEnvironmentVariable("ZOTERO_USER_ID", "your-numeric-id", "User")
+[Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "your-openai-key", "User")</code></pre>
 
-# Optional - override Google Drive detection (Windows users especially)
-export LITREV_DRIVE_PATH="/path/to/your/Google Drive"</code></pre>
+                <p><strong>Verify:</strong></p>
+                <ul>
+                    <li>Close all terminals and Claude Code</li>
+                    <li>Open a NEW PowerShell window</li>
+                    <li>Run: <code>$env:ZOTERO_API_KEY</code> - should show your key</li>
+                </ul>
 
-                <h4>Reload your shell configuration:</h4>
-                <p><strong>bash</strong> (most Linux, older macOS):</p>
-                <pre><code>source ~/.bashrc
+                <p><strong>Alternative:</strong> If using Git Bash, add to <code>~/.bashrc</code>:</p>
+                <pre><code>export ZOTERO_API_KEY="your-api-key-here"
+export ZOTERO_USER_ID="your-numeric-id"
+export OPENAI_API_KEY="your-openai-key"</code></pre>
+                <p>Then close and reopen your terminal.</p>
+
+                <h4>macOS:</h4>
+                <p>Add to your shell config file (<code>~/.zshrc</code> for newer macOS, <code>~/.bash_profile</code> for older):</p>
+                <pre><code>export ZOTERO_API_KEY="your-api-key-here"
+export ZOTERO_USER_ID="your-numeric-id"
+export OPENAI_API_KEY="your-openai-key"</code></pre>
+
+                <p>Then:</p>
+                <pre><code>source ~/.zshrc  # or ~/.bash_profile
 # OR restart your terminal</code></pre>
 
-                <p><strong>zsh</strong> (newer macOS, some Linux):</p>
-                <pre><code>source ~/.zshrc
+                <p><strong>Verify:</strong> Open a NEW terminal and run <code>echo $ZOTERO_API_KEY</code> - should show your key.</p>
+
+                <h4>Linux:</h4>
+                <p>Add to your shell config file (<code>~/.bashrc</code> or <code>~/.zshrc</code>):</p>
+                <pre><code>export ZOTERO_API_KEY="your-api-key-here"
+export ZOTERO_USER_ID="your-numeric-id"
+export OPENAI_API_KEY="your-openai-key"</code></pre>
+
+                <p>Then:</p>
+                <pre><code>source ~/.bashrc  # or ~/.zshrc
 # OR restart your terminal</code></pre>
 
-                <p><strong>Windows Git Bash / MSYS</strong>:</p>
-                <pre><code>source ~/.bashrc
-# OR restart your terminal</code></pre>
-
-                <p><strong>Verify:</strong> Open a NEW terminal and run <code>echo $ZOTERO_API_KEY</code> - it should show your key.</p>
+                <p><strong>Verify:</strong> Open a NEW terminal and run <code>echo $ZOTERO_API_KEY</code> - should show your key.</p>
 
                 <h3>3. Configure Claude Code</h3>
                 <p>Add the MCP server:</p>
