@@ -144,6 +144,34 @@ def insert_chunk(
     """, [item_key, chunk_index, page_number, text, embedding])
 
 
+def insert_chunks_batch(
+    item_key: str,
+    chunks: list[dict],
+    embeddings: list[list[float]],
+):
+    """
+    Batch insert all chunks for a paper in a single transaction.
+
+    Args:
+        item_key: The paper's item key
+        chunks: List of chunk dicts with 'chunk_index', 'page_number', 'text'
+        embeddings: List of embedding vectors corresponding to chunks
+    """
+    conn = get_connection()
+
+    # Prepare data for batch insert
+    data = [
+        (item_key, chunk['chunk_index'], chunk.get('page_number'), chunk['text'], embedding)
+        for chunk, embedding in zip(chunks, embeddings)
+    ]
+
+    # Use executemany for efficient batch insert
+    conn.executemany("""
+        INSERT INTO chunks (item_key, chunk_index, page_number, text, embedding)
+        VALUES (?, ?, ?, ?, ?)
+    """, data)
+
+
 def search_similar(
     query_embedding: list[float],
     project: Optional[str] = None,

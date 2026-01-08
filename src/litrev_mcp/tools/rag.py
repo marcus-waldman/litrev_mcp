@@ -18,6 +18,7 @@ from litrev_mcp.tools.rag_db import (
     delete_paper,
     insert_paper,
     insert_chunk,
+    insert_chunks_batch,
     search_similar,
     get_indexed_papers,
     get_stats,
@@ -347,16 +348,13 @@ async def _index_single_paper_tracked(
         total_chunks=len(chunks),
     )
 
-    # Insert chunks with embeddings
-    for chunk, embedding in zip(chunks, embeddings):
-        await asyncio.to_thread(
-            insert_chunk,
-            item_key=item_key,
-            chunk_index=chunk['chunk_index'],
-            page_number=chunk['page_number'],
-            text=chunk['text'],
-            embedding=embedding,
-        )
+    # Batch insert all chunks with embeddings (single DB call)
+    await asyncio.to_thread(
+        insert_chunks_batch,
+        item_key=item_key,
+        chunks=chunks,
+        embeddings=embeddings,
+    )
 
     return {'status': 'indexed', 'chunks': len(chunks)}
 
