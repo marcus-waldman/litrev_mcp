@@ -103,6 +103,11 @@ async def semantic_scholar_references(
 
     Returns:
         Dictionary with source paper info and references list.
+
+    Note:
+        The `is_influential` field in results will be False because the
+        Semantic Scholar API no longer supports the isInfluential field
+        (as of January 2025, GitHub issue #2).
     """
     try:
         s2 = get_s2_client()
@@ -113,8 +118,8 @@ async def semantic_scholar_references(
             fields=[
                 'title', 'paperId', 'references', 'references.paperId',
                 'references.title', 'references.authors', 'references.year',
-                'references.externalIds', 'references.citationCount',
-                'references.isInfluential'
+                'references.externalIds', 'references.citationCount'
+                # Note: references.isInfluential removed due to API deprecation (GitHub #2)
             ]
         )
 
@@ -197,6 +202,11 @@ async def semantic_scholar_citations(
 
     Returns:
         Dictionary with source paper info and citations list.
+
+    Note:
+        The `is_influential` field in results will be False because the
+        Semantic Scholar API no longer supports the isInfluential field
+        (as of January 2025, GitHub issue #2).
     """
     try:
         s2 = get_s2_client()
@@ -207,8 +217,8 @@ async def semantic_scholar_citations(
             fields=[
                 'title', 'paperId', 'citations', 'citations.paperId',
                 'citations.title', 'citations.authors', 'citations.year',
-                'citations.externalIds', 'citations.citationCount',
-                'citations.isInfluential'
+                'citations.externalIds', 'citations.citationCount'
+                # Note: citations.isInfluential removed due to API deprecation (GitHub #2)
             ]
         )
 
