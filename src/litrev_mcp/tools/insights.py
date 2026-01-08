@@ -317,36 +317,19 @@ async def _add_references_to_zotero(content: str, project: str, config) -> dict[
             skipped.append({'doi': doi, 'reason': 'Already in Zotero'})
             continue
 
-        # Fetch metadata from CrossRef
-        metadata = await fetch_crossref_metadata(doi)
-
-        # Add to Zotero with metadata
+        # Add to Zotero (will auto-fetch metadata from DOI)
         try:
-            if metadata and metadata.get('title'):
-                # Use CrossRef metadata
-                add_result = await zotero_add_paper(
-                    project=project,
-                    doi=doi,
-                    title=metadata.get('title'),
-                    authors=metadata.get('authors'),
-                    year=metadata.get('year'),
-                    source='Consensus',
-                )
-            else:
-                # Fallback to DOI-only if CrossRef fails
-                add_result = await zotero_add_paper(
-                    project=project,
-                    doi=doi,
-                    source='Consensus',
-                )
+            add_result = await zotero_add_paper(
+                project=project,
+                doi=doi,
+                source='Consensus',
+            )
 
             if add_result.get('success'):
                 added.append({
                     'doi': doi,
                     'item_key': add_result.get('item_key'),
                     'title': add_result.get('title'),
-                    'authors': metadata.get('authors') if metadata else None,
-                    'year': metadata.get('year') if metadata else None,
                 })
                 # Add to existing set to avoid duplicates within same batch
                 existing_dois.add(doi_normalized)

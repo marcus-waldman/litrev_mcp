@@ -20,6 +20,7 @@ from litrev_mcp.config import (
     get_zotero_user_id,
 )
 from litrev_mcp.tools.context import get_context_text
+from litrev_mcp.tools.insights import fetch_crossref_metadata
 
 
 class ZoteroError(Exception):
@@ -297,13 +298,28 @@ async def zotero_add_paper(
             }
 
         # Create item template
+        fetch_warning = None
         if doi:
-            # Try to fetch metadata from DOI
-            # Note: Zotero Web API doesn't have direct DOI lookup
-            # We'll create a basic item and let BBT handle the citation key
+            # Fetch metadata from CrossRef if no title provided
+            crossref_metadata = None
+
+            if not title:
+                crossref_metadata = await fetch_crossref_metadata(doi)
+                if crossref_metadata and crossref_metadata.get('title'):
+                    title = crossref_metadata['title']
+                    authors = authors or crossref_metadata.get('authors')
+                    year = year or crossref_metadata.get('year')
+                else:
+                    fetch_warning = "CrossRef metadata fetch failed, using placeholder title"
+
             template = zot.item_template('journalArticle')
             template['DOI'] = doi
             template['title'] = title or f"[DOI: {doi}]"
+
+            # Add journal if available from CrossRef
+            if crossref_metadata and crossref_metadata.get('journal'):
+                template['publicationTitle'] = crossref_metadata['journal']
+
             if authors:
                 template['creators'] = [{'creatorType': 'author', 'name': authors}]
             if year:
@@ -346,7 +362,7 @@ async def zotero_add_paper(
             item_data = item.get('data', {})
             citation_key = get_citation_key_from_extra(item_data.get('extra', ''))
 
-            return {
+            result = {
                 'success': True,
                 'item_key': item_key,
                 'citation_key': citation_key,
@@ -355,6 +371,9 @@ async def zotero_add_paper(
                 'drive_folder': f"Literature/{project}/",
                 'message': f"Added to {project}. Tagged as {config.status_tags.needs_pdf}.",
             }
+            if fetch_warning:
+                result['warning'] = fetch_warning
+            return result
         else:
             failed = resp.get('failed', {})
             error_msg = str(failed) if failed else "Unknown error creating item"
@@ -367,6 +386,85 @@ async def zotero_add_paper(
         return {'success': False, 'error': {'code': 'ZOTERO_AUTH_FAILED', 'message': str(e)}}
     except Exception as e:
         return {'success': False, 'error': {'code': 'ZOTERO_ERROR', 'message': str(e)}}
+
+
+async def zotero_delete_paper(
+    item_key: Optional[str] = None,
+    doi: Optional[str] = None,
+    title_search: Optional[str] = None,
+    confirm: bool = False,
+) -> dict[str, Any]:
+    """
+    Delete a paper from Zotero.
+
+    CAUTION: This permanently deletes items. Requires confirm=True.
+
+    Args:
+        item_key: Zotero item key
+        doi: Identify by DOI
+        title_search: Search by title fragment
+        confirm: Must be True to proceed with deletion
+
+    Returns:
+        Dictionary with deletion result.
+    """
+    try:
+        if not confirm:
+            return {
+                'success': False,
+                'error': {
+                    'code': 'CONFIRMATION_REQUIRED',
+                    'message': 'Deletion requires confirm=True parameter',
+                }
+            }
+
+        zot = get_zotero_client()
+
+        # Find item
+        if item_key:
+            item = zot.item(item_key)
+            if not item:
+                return {'success': False, 'error': {'code': 'NOT_FOUND', 'message': f"Item {item_key} not found"}}
+            items_to_delete = [item]
+        elif doi or title_search:
+            # Search for item
+            if doi:
+                items = zot.items(q=doi)
+            else:
+                items = zot.items(q=title_search)
+
+            items_to_delete = [i for i in items if i.get('data', {}).get('itemType') != 'attachment']
+
+            if len(items_to_delete) == 0:
+                return {'success': False, 'error': {'code': 'NOT_FOUND', 'message': 'No matching items found'}}
+            elif len(items_to_delete) > 1:
+                return {
+                    'success': False,
+                    'error': {
+                        'code': 'MULTIPLE_MATCHES',
+                        'message': f"Found {len(items_to_delete)} items. Use item_key for precise deletion.",
+                        'matches': [{'key': i['data']['key'], 'title': i['data'].get('title')} for i in items_to_delete]
+                    }
+                }
+        else:
+            return {'success': False, 'error': {'code': 'MISSING_IDENTIFIER', 'message': 'Provide item_key, doi, or title_search'}}
+
+        # Delete the item
+        item_to_delete = items_to_delete[0]
+        item_data = item_to_delete.get('data', {})
+        zot.delete_item(item_to_delete)
+
+        return {
+            'success': True,
+            'deleted_key': item_data.get('key'),
+            'deleted_title': item_data.get('title'),
+            'message': f"Deleted: {item_data.get('title', 'Unknown')}",
+        }
+
+    except ZoteroAuthError as e:
+        return {'success': False, 'error': {'code': 'ZOTERO_AUTH_FAILED', 'message': str(e)}}
+    except Exception as e:
+        return {'success': False, 'error': {'code': 'DELETE_ERROR', 'message': str(e)}}
 
 
 async def zotero_update_status(

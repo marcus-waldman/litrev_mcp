@@ -10,7 +10,7 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 
 ✅ **v0.2.2 - Intelligent Literature Synthesis**
 
-- 29 tools across 8 categories
+- 30 tools across 8 categories
 - Full Zotero integration
 - Search APIs (PubMed, Semantic Scholar, ERIC)
 - Knowledge base system
@@ -22,10 +22,11 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 
 ## Features
 
-### Zotero Integration (9 tools)
+### Zotero Integration (10 tools)
 - `zotero_list_projects` - List collections with paper counts by status
 - `zotero_create_collection` - Create a new Zotero collection
-- `zotero_add_paper` - Add papers by DOI or manual entry
+- `zotero_add_paper` - Add papers by DOI or manual entry (automatically fetches metadata from CrossRef)
+- `zotero_delete_paper` - Delete papers from Zotero (requires confirmation)
 - `zotero_update_status` - Change status tags (_needs-pdf, _needs-notebooklm, _complete)
 - `zotero_get_by_status` - Filter papers by status
 - `zotero_search` - Search your library

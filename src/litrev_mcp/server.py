@@ -22,6 +22,7 @@ from litrev_mcp.tools.zotero import (
     zotero_list_projects,
     zotero_create_collection,
     zotero_add_paper,
+    zotero_delete_paper,
     zotero_update_status,
     zotero_get_by_status,
     zotero_search,
@@ -141,6 +142,32 @@ async def list_tools() -> list[Tool]:
                     },
                 },
                 "required": ["project"],
+            },
+        ),
+        Tool(
+            name="zotero_delete_paper",
+            description="Delete a paper from Zotero. CAUTION: Permanent deletion requires confirm=True.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "item_key": {
+                        "type": "string",
+                        "description": "Zotero item key",
+                    },
+                    "doi": {
+                        "type": "string",
+                        "description": "Paper DOI",
+                    },
+                    "title_search": {
+                        "type": "string",
+                        "description": "Search by title fragment",
+                    },
+                    "confirm": {
+                        "type": "boolean",
+                        "description": "Must be true to proceed with deletion",
+                        "default": False,
+                    },
+                },
             },
         ),
         Tool(
@@ -688,6 +715,15 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             authors=arguments.get("authors"),
             year=arguments.get("year"),
             source=arguments.get("source"),
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "zotero_delete_paper":
+        result = await zotero_delete_paper(
+            item_key=arguments.get("item_key"),
+            doi=arguments.get("doi"),
+            title_search=arguments.get("title_search"),
+            confirm=arguments.get("confirm", False),
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
