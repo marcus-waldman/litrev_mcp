@@ -36,12 +36,25 @@ class BetterBibTexConfig(BaseModel):
     citation_key_pattern: str = "[auth:lower]_[shorttitle3_3:lower]_[year]"
 
 
+class RAGConfig(BaseModel):
+    """RAG (Retrieval Augmented Generation) configuration."""
+    embedding_dimensions: int = Field(
+        default=1536,
+        ge=256,
+        le=1536,
+        description="Embedding vector dimensions. OpenAI text-embedding-3-small supports 256-1536. "
+                    "Lower = smaller storage, slightly less accuracy. Default 1536 (6KB/chunk), "
+                    "512 recommended for large collections (2KB/chunk, ~5% accuracy loss)."
+    )
+
+
 class Config(BaseModel):
     """Main configuration model."""
     projects: dict[str, ProjectConfig] = Field(default_factory=dict)
     status_tags: StatusTags = Field(default_factory=StatusTags)
     notebooklm_pattern: str = "{project_code} - {type} - {descriptor}"
     better_bibtex: BetterBibTexConfig = Field(default_factory=BetterBibTexConfig)
+    rag: RAGConfig = Field(default_factory=RAGConfig)
 
 
 class ConfigManager:

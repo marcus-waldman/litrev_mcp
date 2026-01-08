@@ -243,7 +243,23 @@ notebooklm_pattern: "{project_code} - {type} - {descriptor}"
 
 better_bibtex:
   citation_key_pattern: "[auth:lower]_[shorttitle3_3:lower]_[year]"
+
+# RAG configuration (optional)
+rag:
+  embedding_dimensions: 1536  # 256-1536, lower = smaller storage
 ```
+
+### RAG Storage Optimization
+
+The `embedding_dimensions` setting controls vector size for semantic search:
+
+| Dimensions | Storage/chunk | Accuracy | Use case |
+|------------|---------------|----------|----------|
+| 1536 (default) | ~6 KB | Best | Small collections (<1000 papers) |
+| 512 | ~2 KB | ~95% | Large collections |
+| 256 | ~1 KB | ~90% | Very large collections |
+
+**Note**: Changing dimensions requires deleting `literature.duckdb` and re-indexing.
 
 ## Workflow Example
 

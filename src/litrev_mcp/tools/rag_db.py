@@ -43,6 +43,11 @@ def close_connection():
         _connection = None
 
 
+def get_embedding_dimensions() -> int:
+    """Get configured embedding dimensions."""
+    return config_manager.config.rag.embedding_dimensions
+
+
 def _init_schema(conn: duckdb.DuckDBPyConnection):
     """Initialize database schema if not exists."""
     # Install and load VSS extension for vector search
@@ -51,6 +56,36 @@ def _init_schema(conn: duckdb.DuckDBPyConnection):
 
     # Enable experimental persistence for HNSW indexes
     conn.execute("SET hnsw_enable_experimental_persistence = true")
+
+    dims = get_embedding_dimensions()
+
+    # Metadata table: stores RAG configuration used for this database
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS rag_metadata (
+            key VARCHAR PRIMARY KEY,
+            value VARCHAR NOT NULL
+        )
+    """)
+
+    # Check/store embedding dimensions
+    existing_dims = conn.execute(
+        "SELECT value FROM rag_metadata WHERE key = 'embedding_dimensions'"
+    ).fetchone()
+
+    if existing_dims is None:
+        # New database - store current config
+        conn.execute(
+            "INSERT INTO rag_metadata (key, value) VALUES ('embedding_dimensions', ?)",
+            [str(dims)]
+        )
+    else:
+        stored_dims = int(existing_dims[0])
+        if stored_dims != dims:
+            raise ValueError(
+                f"Database was created with {stored_dims} dimensions but config specifies {dims}. "
+                f"Either update config.yaml to use {stored_dims} dimensions, or delete the database "
+                f"and re-index with the new dimension setting."
+            )
 
     # Papers table: metadata about indexed papers
     conn.execute("""
@@ -70,14 +105,14 @@ def _init_schema(conn: duckdb.DuckDBPyConnection):
     # Chunks table: text segments with embeddings
     # Use a sequence for auto-incrementing IDs
     conn.execute("CREATE SEQUENCE IF NOT EXISTS chunks_id_seq")
-    conn.execute("""
+    conn.execute(f"""
         CREATE TABLE IF NOT EXISTS chunks (
             id INTEGER PRIMARY KEY DEFAULT nextval('chunks_id_seq'),
             item_key VARCHAR NOT NULL,
             chunk_index INTEGER NOT NULL,
             page_number INTEGER,
             text VARCHAR NOT NULL,
-            embedding FLOAT[1536] NOT NULL,
+            embedding FLOAT[{dims}] NOT NULL,
             UNIQUE(item_key, chunk_index)
         )
     """)
@@ -183,9 +218,10 @@ def search_similar(
     Returns list of dicts with: citation_key, title, authors, year, page_number, text, score
     """
     conn = get_connection()
+    dims = get_embedding_dimensions()
 
     # Build query with optional project filter
-    sql = """
+    sql = f"""
         SELECT
             p.citation_key,
             p.title,
@@ -193,7 +229,7 @@ def search_similar(
             p.year,
             c.page_number,
             c.text,
-            array_cosine_similarity(c.embedding, ?::FLOAT[1536]) as score
+            array_cosine_similarity(c.embedding, ?::FLOAT[{dims}]) as score
         FROM chunks c
         JOIN papers p ON c.item_key = p.item_key
     """
@@ -262,8 +298,19 @@ def get_stats() -> dict:
         "SELECT project, COUNT(*) FROM papers GROUP BY project"
     ).fetchall()
 
+    # Get stored embedding dimensions
+    dims_result = conn.execute(
+        "SELECT value FROM rag_metadata WHERE key = 'embedding_dimensions'"
+    ).fetchone()
+    dims = int(dims_result[0]) if dims_result else get_embedding_dimensions()
+
+    # Estimate storage size (dims * 4 bytes per float * chunk_count)
+    estimated_embedding_size_mb = (dims * 4 * chunk_count) / (1024 * 1024)
+
     return {
         'total_papers': paper_count,
         'total_chunks': chunk_count,
         'papers_by_project': {r[0]: r[1] for r in project_counts},
+        'embedding_dimensions': dims,
+        'estimated_embedding_size_mb': round(estimated_embedding_size_mb, 2),
     }

@@ -13,6 +13,8 @@ from typing import Optional
 import pdfplumber
 from openai import OpenAI
 
+from litrev_mcp.config import config_manager
+
 
 class EmbeddingError(Exception):
     """Error during embedding generation."""
@@ -30,28 +32,36 @@ def get_openai_client() -> OpenAI:
     return OpenAI(api_key=api_key)
 
 
-def embed_texts(texts: list[str]) -> list[list[float]]:
+def get_embedding_dimensions() -> int:
+    """Get configured embedding dimensions."""
+    return config_manager.config.rag.embedding_dimensions
+
+
+def embed_texts(texts: list[str], dimensions: Optional[int] = None) -> list[list[float]]:
     """
     Generate embeddings for a list of texts using OpenAI.
 
-    Uses text-embedding-3-small model (1536 dimensions).
+    Uses text-embedding-3-small model with configurable dimensions.
     Cost: ~$0.02 per 1M tokens.
 
     Args:
         texts: List of text strings to embed
+        dimensions: Override dimensions (default: use config value)
 
     Returns:
-        List of 1536-dimensional embedding vectors
+        List of embedding vectors with configured dimensions
     """
     if not texts:
         return []
 
     client = get_openai_client()
+    dims = dimensions if dimensions is not None else get_embedding_dimensions()
 
     try:
         response = client.embeddings.create(
             model="text-embedding-3-small",
-            input=texts
+            input=texts,
+            dimensions=dims
         )
         return [item.embedding for item in response.data]
     except Exception as e:

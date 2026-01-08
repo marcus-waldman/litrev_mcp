@@ -796,6 +796,24 @@ Start with a key paper
                     <li>Try to obtain a text-based version of the PDF</li>
                     <li>Use OCR software to create a searchable PDF first</li>
                 </ul>
+
+                <h3>RAG storage optimization</h3>
+                <p><strong>Problem:</strong> Database growing too large with many papers</p>
+                <p><strong>Solution:</strong> Reduce embedding dimensions in <code>config.yaml</code>:</p>
+                <pre><code># Literature/.litrev/config.yaml
+rag:
+  embedding_dimensions: 512  # Default is 1536</code></pre>
+                <table>
+                    <thead>
+                        <tr><th>Dimensions</th><th>Storage/chunk</th><th>Accuracy</th><th>Use case</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1536 (default)</td><td>~6 KB</td><td>Best</td><td>Small collections</td></tr>
+                        <tr><td>512</td><td>~2 KB</td><td>~95%</td><td>Large collections</td></tr>
+                        <tr><td>256</td><td>~1 KB</td><td>~90%</td><td>Very large collections</td></tr>
+                    </tbody>
+                </table>
+                <p><em>Note: Changing dimensions requires deleting <code>literature.duckdb</code> and re-indexing all papers.</em></p>
             </section>
 
             <footer>
