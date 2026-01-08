@@ -272,6 +272,8 @@ Add the MCP server to Claude Code:
 claude mcp add litrev -- litrev-mcp
 ```
 
+**Important:** You need to run this command **in every repository** where you want to use litrev-mcp. MCP servers are registered per-project. After the first setup, just navigate to each new project directory and run the same command.
+
 ### 4. Verify Setup
 
 In Claude Code:
@@ -478,10 +480,11 @@ Already have litrev-mcp on one machine? Here's how to set up on another:
    source ~/.bashrc  # or ~/.zshrc
    ```
 
-**5. Add MCP server**
+**5. Add MCP server** (if not already done in another repo on this machine)
    ```bash
    claude mcp add litrev -- litrev-mcp
    ```
+   **Note:** MCP servers are per-project. If you've already done this on another repository on this machine, you don't need to repeat it—the same server instance is shared.
 
 **6. Verify**
    ```
