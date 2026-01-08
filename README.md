@@ -8,14 +8,15 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 
 ## Status
 
-✅ **v0.2.1 - Project Context Feature Added**
+✅ **v0.2.2 - Intelligent Literature Synthesis**
 
 - 29 tools across 8 categories
 - Full Zotero integration
 - Search APIs (PubMed, Semantic Scholar, ERIC)
 - Knowledge base system
 - Semantic search over your PDFs (DuckDB + OpenAI embeddings)
-- **NEW: Project context for tailored responses** (goal, audience, style)
+- Project context for tailored responses (goal, audience, style)
+- **NEW: Claude-powered synthesis with coverage assessment** - `ask_papers` now provides reasoned answers that honestly assess literature coverage and suggest follow-up searches when gaps exist
 - Project dashboard
 - Setup wizard
 
@@ -48,7 +49,7 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 ### RAG Literature Search (4 tools)
 - `index_papers` - Index PDFs for semantic search (extracts text, chunks, generates OpenAI embeddings)
 - `search_papers` - Semantic search across indexed papers, returns passages with citations
-- `ask_papers` - Ask questions about your literature, returns relevant passages for synthesis
+- `ask_papers` - Ask questions about your literature; uses Claude to synthesize a reasoned answer with honest assessment of coverage adequacy and recommendations for follow-up searches when gaps exist
 - `rag_status` - View indexing status and statistics
 
 ### Status & Dashboard (2 tools)

@@ -533,25 +533,28 @@ async def search_papers(
 async def ask_papers(
     question: str,
     project: Optional[str] = None,
-    max_passages: int = 5,
+    max_passages: int = 10,
 ) -> dict[str, Any]:
     """
     Ask a question about your literature.
 
-    Searches indexed papers and returns relevant passages formatted
-    with citations for Claude to synthesize an answer.
+    Searches indexed papers and returns relevant passages with coverage
+    metadata and synthesis instructions. Claude Code synthesizes the answer,
+    with guidance to honestly assess whether the literature adequately
+    addresses the question.
 
     Args:
         question: Natural language question about your papers
         project: Limit to specific project (optional)
-        max_passages: Number of relevant passages to include (default 5, max 20)
+        max_passages: Number of relevant passages to include (default 10, max 20)
 
     Returns:
         {
             success: bool,
             question: str,
-            context: str,  # Formatted passages with citations
-            sources: [{citation_key, title, page, score}]
+            context: str,  # Formatted passages with synthesis instructions
+            coverage: {passages_found, unique_papers, scores: {min, max, mean}},
+            sources: [{citation_key, title, authors, year, page, score}]
         }
     """
     try:
@@ -574,57 +577,105 @@ async def ask_papers(
             return {
                 'success': True,
                 'question': question,
-                'context': "No relevant passages found in the indexed papers. Make sure papers are indexed using index_papers first.",
+                'context': "No relevant passages found in your indexed papers. Make sure papers are indexed using index_papers first.",
+                'coverage': {'passages_found': 0, 'unique_papers': 0, 'scores': None},
                 'sources': [],
             }
 
-        # Format passages for Claude
-        context_parts = [
-            f"Question: {question}\n\n"
-            f"Relevant passages from your literature ({len(results)} found):\n"
-        ]
+        # Calculate coverage metadata
+        unique_papers = len(set(r['citation_key'] for r in results))
+        scores = [r['score'] for r in results]
+        coverage = {
+            'passages_found': len(results),
+            'unique_papers': unique_papers,
+            'scores': {
+                'min': round(min(scores), 4),
+                'max': round(max(scores), 4),
+                'mean': round(sum(scores) / len(scores), 4),
+            }
+        }
 
-        sources = []
+        # Build context with passages and synthesis instructions
+        context_parts = []
+
+        # Add project context if available
+        if project:
+            project_context = get_context_text(project)
+            if project_context:
+                context_parts.append(f"## Project Context\n{project_context}\n\n---\n")
+
+        # Question
+        context_parts.append(f"## Question\n{question}\n\n")
+
+        # Coverage summary (helps model reason about adequacy)
+        context_parts.append(
+            f"## Literature Coverage\n"
+            f"Found {coverage['passages_found']} passages from {coverage['unique_papers']} papers. "
+            f"Similarity scores: {coverage['scores']['min']:.2f} to {coverage['scores']['max']:.2f} "
+            f"(mean: {coverage['scores']['mean']:.2f}).\n\n"
+        )
+
+        # Passages
+        context_parts.append("## Relevant Passages\n")
         for i, r in enumerate(results, 1):
-            # Build citation string
+            citation = r['citation_key']
             if r['page_number']:
-                citation = f"{r['citation_key']}, p.{r['page_number']}"
-            else:
-                citation = r['citation_key']
+                citation += f", p.{r['page_number']}"
 
-            # Add passage with citation
             context_parts.append(
                 f"\n[{i}] {r['title']} ({citation}):\n"
                 f'"{r["text"]}"\n'
             )
 
-            sources.append({
+        # Synthesis instructions
+        context_parts.append("""
+---
+
+## Synthesis Instructions
+
+Based on these passages, provide a thoughtful response to the question.
+
+**Important:** Before synthesizing, consider whether this literature actually addresses the question well:
+- Do these passages directly address the question, or are they tangentially related?
+- Is the topic well-covered (multiple papers, different perspectives) or thinly covered?
+- Are there aspects of the question that none of the passages address?
+
+If coverage is limited or incomplete:
+- Be honest about what the passages do and don't address
+- Provide the best answer from what's available, but note limitations naturally
+- Suggest specific follow-up searches (search terms, databases like PubMed/Semantic Scholar/Consensus)
+
+If coverage is good:
+- Synthesize across sources, noting agreements and any tensions
+- Cite sources using the citation keys
+
+Write in a natural, reasoning tone. Avoid formulaic language - reason authentically about the coverage and answer.
+""")
+
+        # Add project context reminder if present
+        if project and get_context_text(project):
+            context_parts.append(
+                "\nTailor your response to the project's goal, audience, and style.\n"
+            )
+
+        # Build sources list
+        sources = [
+            {
                 'citation_key': r['citation_key'],
                 'title': r['title'],
                 'authors': r['authors'],
                 'year': r['year'],
                 'page': r['page_number'],
                 'score': r['score'],
-            })
-
-        # Add project context if available
-        if project:
-            project_context = get_context_text(project)
-            if project_context:
-                context_parts.append(
-                    f"\n---\n## Project Context\n{project_context}\n---\n"
-                )
-
-        context_parts.append(
-            "\nBased on these passages from your literature, synthesize an answer to the question. "
-            "If project context is provided above, tailor your response to match the goal, audience, and style specified. "
-            "Cite sources using the citation keys provided."
-        )
+            }
+            for r in results
+        ]
 
         return {
             'success': True,
             'question': question,
             'context': ''.join(context_parts),
+            'coverage': coverage,
             'sources': sources,
         }
 
