@@ -155,6 +155,20 @@ In Claude Code:
 > Use setup_check to verify my configuration
 ```
 
+### 5. Install Skill (Optional)
+
+Copy the `/init-litrev-context` skill to your global Claude skills folder for collaborative project context setup:
+
+```bash
+# Create global skills folder if it doesn't exist
+mkdir -p ~/.claude/skills
+
+# Copy the skill
+cp -r skills/init-litrev-context ~/.claude/skills/
+```
+
+Then restart Claude Code. Use `/init-litrev-context PROJECT` to collaboratively set up project context.
+
 ## Usage
 
 ### First-Time Setup
