@@ -19,6 +19,7 @@ from litrev_mcp.config import (
     get_zotero_api_key,
     get_zotero_user_id,
 )
+from litrev_mcp.tools.context import get_context_text
 
 
 class ZoteroError(Exception):
@@ -527,6 +528,7 @@ async def zotero_get_by_status(
             'success': True,
             'project': project,
             'status': status,
+            'context': get_context_text(project),
             'count': len(papers),
             'papers': papers,
         }

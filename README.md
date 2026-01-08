@@ -8,13 +8,14 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 
 ## Status
 
-✅ **v0.2.0 - RAG Literature Search Added**
+✅ **v0.2.1 - Project Context Feature Added**
 
-- 27 tools across 7 categories
+- 29 tools across 8 categories
 - Full Zotero integration
 - Search APIs (PubMed, Semantic Scholar, ERIC)
 - Knowledge base system
-- **NEW: Semantic search over your PDFs** (DuckDB + OpenAI embeddings)
+- Semantic search over your PDFs (DuckDB + OpenAI embeddings)
+- **NEW: Project context for tailored responses** (goal, audience, style)
 - Project dashboard
 - Setup wizard
 
@@ -57,6 +58,12 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 ### Setup Wizard (2 tools)
 - `setup_check` - Verify configuration (Google Drive, Zotero credentials)
 - `setup_create_project` - Create new project with directory structure
+
+### Project Context (2 tools)
+- `get_project_context` - Get project context (goal, audience, style) from _context.md
+- `update_project_context` - Create or update project context file
+
+Use `/init-litrev-context PROJECT` skill for collaborative context setup.
 
 ### Test Tool (1 tool)
 - `litrev_hello` - Verify litrev-mcp is working
@@ -195,6 +202,16 @@ In Claude Code:
 > Based on my literature, is there support for using FIML over multiple imputation?
 ```
 
+### Project Context
+
+```
+> /init-litrev-context MI-IC
+
+> Get the context for my MEAS-ERR project
+
+> Update my MI-IC context to focus more on practical guidance for applied researchers
+```
+
 ### Project Dashboard
 
 ```
@@ -212,6 +229,7 @@ Google Drive/
     │   ├── config.yaml          # Project configuration
     │   └── literature.duckdb    # RAG vector index (auto-created)
     ├── MEAS-ERR/                # Project directory
+    │   ├── _context.md          # Project context (goal, audience, style)
     │   ├── _notes/              # Saved insights
     │   │   ├── 2024-01-15_consensus_simex_methods.md
     │   │   └── 2024-01-16_notebooklm_comparison.md

@@ -31,6 +31,7 @@ from litrev_mcp.tools.rag_embed import (
     EmbeddingError,
 )
 from litrev_mcp.progress import ProgressTracker, TaskStage, progress_server
+from litrev_mcp.tools.context import get_context_text
 
 
 async def index_papers(
@@ -606,8 +607,17 @@ async def ask_papers(
                 'score': r['score'],
             })
 
+        # Add project context if available
+        if project:
+            project_context = get_context_text(project)
+            if project_context:
+                context_parts.append(
+                    f"\n---\n## Project Context\n{project_context}\n---\n"
+                )
+
         context_parts.append(
             "\nBased on these passages from your literature, synthesize an answer to the question. "
+            "If project context is provided above, tailor your response to match the goal, audience, and style specified. "
             "Cite sources using the citation keys provided."
         )
 

@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from litrev_mcp.config import config_manager
 from litrev_mcp.tools.zotero import get_zotero_client, get_status_from_tags, item_to_dict
 from litrev_mcp.tools.insights import get_notes_path
+from litrev_mcp.tools.context import get_context_text
 
 
 async def project_status(
@@ -147,6 +148,7 @@ async def project_status(
             'success': True,
             'project': project,
             'name': proj_config.name,
+            'context': get_context_text(project),
             'summary': summary,
             'insights': insights_stats,
             'recent_additions': recent_additions,

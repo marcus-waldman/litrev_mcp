@@ -492,6 +492,30 @@ export OPENAI_API_KEY="your-openai-key"</code></pre>
                     </tbody>
                 </table>
 
+                <h3>Project Context (2 tools)</h3>
+                <table class="tool-table">
+                    <thead>
+                        <tr>
+                            <th>Tool</th>
+                            <th>What it does</th>
+                            <th>Key Parameters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>get_project_context</code></td>
+                            <td>Get project context (goal, audience, style) from _context.md</td>
+                            <td><code>project</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>update_project_context</code></td>
+                            <td>Create or update project context file</td>
+                            <td><code>project</code>, <code>content</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p><strong>Tip:</strong> Use <code>/init-litrev-context PROJECT</code> for collaborative context setup.</p>
+
                 <h3>Test Tool (1 tool)</h3>
                 <table class="tool-table">
                     <thead>
@@ -817,7 +841,7 @@ rag:
             </section>
 
             <footer>
-                <p>Built with litrev-mcp v0.2.0 | <a href="https://github.com/marcus-waldman/litrev_mcp" target="_blank">GitHub</a></p>
+                <p>Built with litrev-mcp v0.2.1 | <a href="https://github.com/marcus-waldman/litrev_mcp" target="_blank">GitHub</a></p>
             </footer>
         </main>
     </div>

@@ -55,6 +55,10 @@ from litrev_mcp.tools.rag import (
     ask_papers,
     rag_status,
 )
+from litrev_mcp.tools.context import (
+    get_project_context,
+    update_project_context,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -621,6 +625,39 @@ async def list_tools() -> list[Tool]:
                 "required": [],
             },
         ),
+        # Project Context tools
+        Tool(
+            name="get_project_context",
+            description="Get project context (goal, audience, style) from _context.md. Returns template if none exists. Use /init-litrev-context skill to set up context collaboratively.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {
+                        "type": "string",
+                        "description": "Project code (e.g., 'MI-IC')",
+                    },
+                },
+                "required": ["project"],
+            },
+        ),
+        Tool(
+            name="update_project_context",
+            description="Create or update project context file (_context.md). Stores goal, audience, style, and key questions to tailor future responses.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {
+                        "type": "string",
+                        "description": "Project code (e.g., 'MI-IC')",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Full markdown content for _context.md",
+                    },
+                },
+                "required": ["project", "content"],
+            },
+        ),
     ]
 
 
@@ -824,6 +861,20 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     if name == "rag_status":
         result = await rag_status(
             project=arguments.get("project"),
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    # Project Context tools
+    if name == "get_project_context":
+        result = await get_project_context(
+            project=arguments.get("project"),
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "update_project_context":
+        result = await update_project_context(
+            project=arguments.get("project"),
+            content=arguments.get("content"),
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 

@@ -14,6 +14,7 @@ from typing import Any, Optional
 import yaml
 
 from litrev_mcp.config import config_manager
+from litrev_mcp.tools.context import get_context_text
 
 
 def extract_dois_from_content(content: str) -> list[str]:
@@ -460,9 +461,13 @@ async def search_insights(
         # Limit results
         matches = matches[:max_results]
 
+        # Get context if project specified
+        context_text = get_context_text(project) if project else None
+
         return {
             'success': True,
             'query': query,
+            'context': context_text,
             'total_matches': len(matches),
             'matches': matches,
         }
@@ -527,6 +532,12 @@ async def analyze_insights(
         # For now, return the raw matches for the agent to synthesize
         # In a full implementation, this could use an LLM to synthesize
         synthesis_parts = []
+
+        # Add project context if available
+        if project:
+            project_context = get_context_text(project)
+            if project_context:
+                synthesis_parts.append(f"## Project Context\n{project_context}\n\n---\n")
 
         if mode == "answer":
             synthesis_parts.append(f"Based on {len(matches)} saved insights:\n")
@@ -648,6 +659,7 @@ async def list_insights(
         return {
             'success': True,
             'project': project,
+            'context': get_context_text(project),
             'total_insights': len(insights),
             'insights': insights,
             'by_source': by_source,
