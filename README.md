@@ -71,10 +71,105 @@ Use `/init-litrev-context PROJECT` skill for collaborative context setup.
 
 ## Prerequisites
 
-- Python 3.10+
-- [Zotero](https://www.zotero.org/) with [Better BibTeX](https://retorque.re/zotero-better-bibtex/) plugin
-- Google Drive (for PDF storage and config sync)
-- Claude Code or Claude Desktop with MCP support
+Before installing litrev-mcp, ensure you have:
+
+### Required for All Features
+
+- **Python 3.10+** ([Download](https://www.python.org/downloads/))
+- **Zotero desktop application** ([Download](https://www.zotero.org/download/))
+- **Better BibTeX plugin for Zotero** ([Installation guide](#better-bibtex-setup))
+- **Google Drive** (mounted/synced to your computer)
+- **Zotero API Key & User ID** ([How to get them](#zotero-credentials))
+
+### Required for RAG Literature Search
+
+- **OpenAI API Key** ([Get one](https://platform.openai.com/api-keys))
+  - Used for `index_papers`, `search_papers`, `ask_papers`
+  - Costs: ~$0.10-0.50 per paper indexed, ~$0.001 per search
+
+### Optional (Improves Performance)
+
+- **NCBI API Key** - Increases PubMed rate limits (3→10 req/sec)
+- **Semantic Scholar API Key** - Increases S2 rate limits (100→5000 req/5min)
+
+### Better BibTeX Setup
+
+Better BibTeX is **required** (not optional) for litrev-mcp to work.
+
+1. In Zotero, go to **Tools → Add-ons**
+2. Click the gear icon → **Install Add-on From File...**
+3. Download and select the [Better BibTeX .xpi file](https://retorque.re/zotero-better-bibtex/installation/)
+4. Restart Zotero
+
+**Verify installation:**
+- Go to **Zotero → Preferences → Better BibTeX**
+- You should see the Better BibTeX settings panel
+
+If Better BibTeX is missing, you'll see errors like `citation key not found`.
+
+### Zotero Credentials
+
+You need both an API Key and User ID:
+
+**Get your API Key:**
+1. Go to [https://www.zotero.org/settings/keys](https://www.zotero.org/settings/keys)
+2. Click **Create new private key**
+3. Name: "litrev-mcp"
+4. Permissions: Check "Allow library access" and "Allow write access"
+5. Click **Save Key**
+6. Copy the generated key (you won't see it again)
+
+**Find your User ID:**
+- It's shown at the top of the same page: "Your userID for use in API calls is **1234567**"
+- Or in your Zotero profile URL: `https://www.zotero.org/USERNAME` → Settings → Feeds/API shows the numeric ID
+
+### Google Drive Folder Setup
+
+litrev-mcp stores PDFs and config in Google Drive for sync across machines.
+
+**1. Create the Literature folder:**
+
+<details>
+<summary><b>macOS</b></summary>
+
+```bash
+mkdir -p ~/Library/CloudStorage/GoogleDrive-*/My\ Drive/Literature
+```
+</details>
+
+<details>
+<summary><b>Linux</b></summary>
+
+```bash
+mkdir -p ~/google-drive/Literature
+```
+</details>
+
+<details>
+<summary><b>Windows</b></summary>
+
+Open File Explorer and create:
+- `G:\My Drive\Literature` (if G: is your Google Drive)
+- OR `C:\Users\YourName\Google Drive\Literature` (depends on your setup)
+
+To find your Google Drive location, right-click the Google Drive icon in your system tray.
+</details>
+
+**2. litrev-mcp will auto-create:**
+- `Literature/.litrev/` - Config folder
+- `Literature/.litrev/config.yaml` - Main config file
+- `Literature/.litrev/literature.duckdb` - RAG search database
+
+**What syncs across machines:**
+| Item | Syncs? | Location |
+|------|--------|----------|
+| Config file | ✅ Yes | `Literature/.litrev/config.yaml` |
+| PDFs | ✅ Yes | `Literature/{PROJECT}/` |
+| Notes | ✅ Yes | `Literature/{PROJECT}/_notes/` |
+| DuckDB index | ❌ No (per-machine) | `Literature/.litrev/literature.duckdb` |
+| Environment vars | ❌ No (per-machine) | `~/.bashrc` or `~/.zshrc` |
+
+**Important:** After setting up on a new machine, you'll need to run `index_papers` again to rebuild the RAG index.
 
 ## Installation
 
@@ -123,22 +218,51 @@ Copy both your **API Key** and **User ID**.
 Add to your shell configuration (`~/.bashrc`, `~/.zshrc`, or `~/.bash_profile`):
 
 ```bash
-# Required
-export ZOTERO_API_KEY="your-api-key-here"
-export ZOTERO_USER_ID="your-user-id-here"
+# Required for all features
+export ZOTERO_API_KEY="your-api-key-here"         # From https://www.zotero.org/settings/keys
+export ZOTERO_USER_ID="your-user-id-here"        # Numeric ID from same page
 
-# Required for RAG literature search
+# Required for RAG features (index_papers, search_papers, ask_papers)
 export OPENAI_API_KEY="your-openai-key"  # Get from https://platform.openai.com/api-keys
 
-# Optional (improves rate limits)
-export NCBI_API_KEY="your-ncbi-key"  # Get from https://www.ncbi.nlm.nih.gov/account/
+# Optional - improves rate limits
+export NCBI_API_KEY="your-ncbi-key"           # Get from https://www.ncbi.nlm.nih.gov/account/
 export SEMANTIC_SCHOLAR_API_KEY="your-s2-key"  # Get from https://www.semanticscholar.org/product/api
 
-# Optional (override Google Drive detection)
+# Optional - override Google Drive detection (Windows users especially)
 export LITREV_DRIVE_PATH="/path/to/your/Google Drive"
 ```
 
-Reload your shell: `source ~/.bashrc`
+**Reload your shell configuration:**
+
+<details>
+<summary><b>bash</b> (most Linux, older macOS)</summary>
+
+```bash
+source ~/.bashrc
+# OR restart your terminal
+```
+</details>
+
+<details>
+<summary><b>zsh</b> (newer macOS, some Linux)</summary>
+
+```bash
+source ~/.zshrc
+# OR restart your terminal
+```
+</details>
+
+<details>
+<summary><b>Windows Git Bash / MSYS</b></summary>
+
+```bash
+source ~/.bashrc
+# OR restart your terminal
+```
+</details>
+
+**Verify:** Open a NEW terminal and run `echo $ZOTERO_API_KEY` - it should show your key.
 
 ### 3. Configure Claude Code
 
@@ -331,7 +455,136 @@ SKIP_INTEGRATION_TESTS=1 pytest
 pytest tests/test_zotero.py -v
 ```
 
+## Setting Up on Additional Machines
+
+Already have litrev-mcp on one machine? Here's how to set up on another:
+
+**1. Install prerequisites** (Python, Zotero, Better BibTeX, Google Drive)
+
+**2. Wait for Google Drive sync**
+   - Ensure `Literature/` folder and contents are synced
+   - Check `Literature/.litrev/config.yaml` exists
+
+**3. Install litrev-mcp**
+   ```bash
+   uv tool install litrev-mcp
+   ```
+
+**4. Set environment variables** (per-machine, not synced)
+   ```bash
+   export ZOTERO_API_KEY="your-key"
+   export ZOTERO_USER_ID="your-id"
+   export OPENAI_API_KEY="your-key"  # if using RAG
+   source ~/.bashrc  # or ~/.zshrc
+   ```
+
+**5. Add MCP server**
+   ```bash
+   claude mcp add litrev -- litrev-mcp
+   ```
+
+**6. Verify**
+   ```
+   > Use setup_check
+   ```
+
+**7. Reindex papers** (DuckDB doesn't sync)
+   ```
+   > Use index_papers for project "PROJECT-CODE"
+   ```
+
+That's it! Your config, PDFs, and notes are already synced from the first machine.
+
+## Database Management
+
+### DuckDB RAG Index
+
+**Location:** `Literature/.litrev/literature.duckdb`
+
+**Size:** Approximately:
+- 50 papers: ~10-20 MB
+- 200 papers: ~50-100 MB
+- 1000 papers: ~300-500 MB
+
+**Backup:** Not necessary - can be regenerated with `index_papers`
+
+**Syncing:** Database does NOT sync via Google Drive (too large, causes conflicts)
+- Each machine maintains its own index
+- After setting up a new machine, run `index_papers` to rebuild
+
+**Corruption:** If you suspect corruption:
+1. Delete `literature.duckdb`
+2. Run `index_papers` again
+
+**Optimization:** For large collections (500+ papers), set:
+```yaml
+rag:
+  embedding_dimensions: 512  # Instead of default 1536
+```
+Reduces storage by ~66% with minimal quality impact.
+
+## Upgrading
+
+**Update to latest version:**
+```bash
+uv tool upgrade litrev-mcp
+```
+
+**Verify:**
+```bash
+litrev-mcp --version
+```
+
+**After upgrading:**
+1. Check if config format changed: `> Use setup_check`
+2. If config issues, compare with default in spec.md
+3. May need to reindex if embedding dimensions changed
+
+**Downgrade** (if needed):
+```bash
+uv tool uninstall litrev-mcp
+uv tool install litrev-mcp==0.2.1  # specify version
+```
+
 ## Troubleshooting
+
+### "citation key not found"
+
+**Cause:** Better BibTeX not installed
+**Fix:** Install Better BibTeX plugin in Zotero (see [Prerequisites](#better-bibtex-setup))
+
+### "OPENAI_API_KEY not set" when using ask_papers
+
+**Cause:** OpenAI key required for RAG features
+**Fix:** Set `export OPENAI_API_KEY="your-key"` and reload shell
+
+### "Failed to connect to litrev MCP server"
+
+**Cause:** Python environment mismatch or server crashed
+**Fix:** Remove and re-add with full path:
+```bash
+claude mcp remove litrev
+claude mcp add litrev -- /full/path/to/.venv/Scripts/python.exe -m litrev_mcp.server
+```
+Or check server health: `python -m litrev_mcp.server`
+
+### Windows: "Cannot find Google Drive"
+
+**Cause:** Drive letter varies by machine
+**Fix:** Set explicitly:
+```bash
+export LITREV_DRIVE_PATH="C:/Users/YourName/Google Drive"
+```
+
+### Database too large
+
+**Cause:** Using default 1536 dimensions with 500+ papers
+**Fix:** Edit `Literature/.litrev/config.yaml`:
+```yaml
+rag:
+  embedding_dimensions: 512
+```
+Then delete `literature.duckdb` and reindex.
 
 ### "Google Drive path not detected"
 
