@@ -8,13 +8,13 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 
 ## Status
 
-✅ **v0.1.0 - All Core Features Implemented**
+✅ **v0.2.0 - RAG Literature Search Added**
 
-- 23 tools across 6 categories
-- 67+ unit tests
+- 27 tools across 7 categories
 - Full Zotero integration
 - Search APIs (PubMed, Semantic Scholar, ERIC)
 - Knowledge base system
+- **NEW: Semantic search over your PDFs** (DuckDB + OpenAI embeddings)
 - Project dashboard
 - Setup wizard
 
@@ -43,6 +43,12 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 - `search_insights` - Search saved insights by keyword
 - `analyze_insights` - Answer questions from saved insights
 - `list_insights` - List all insights for a project
+
+### RAG Literature Search (4 tools)
+- `index_papers` - Index PDFs for semantic search (extracts text, chunks, generates OpenAI embeddings)
+- `search_papers` - Semantic search across indexed papers, returns passages with citations
+- `ask_papers` - Ask questions about your literature, returns relevant passages for synthesis
+- `rag_status` - View indexing status and statistics
 
 ### Status & Dashboard (2 tools)
 - `project_status` - Get comprehensive project dashboard
@@ -113,6 +119,9 @@ Add to your shell configuration (`~/.bashrc`, `~/.zshrc`, or `~/.bash_profile`):
 export ZOTERO_API_KEY="your-api-key-here"
 export ZOTERO_USER_ID="your-user-id-here"
 
+# Required for RAG literature search
+export OPENAI_API_KEY="your-openai-key"  # Get from https://platform.openai.com/api-keys
+
 # Optional (improves rate limits)
 export NCBI_API_KEY="your-ncbi-key"  # Get from https://www.ncbi.nlm.nih.gov/account/
 export SEMANTIC_SCHOLAR_API_KEY="your-s2-key"  # Get from https://www.semanticscholar.org/product/api
@@ -176,6 +185,16 @@ In Claude Code:
 > What have I learned about when to use SIMEX vs regression calibration?
 ```
 
+### RAG Literature Search
+
+```
+> Index my MI-IC project for semantic search
+
+> Search my papers for "AIC correction for missing data"
+
+> Based on my literature, is there support for using FIML over multiple imputation?
+```
+
 ### Project Dashboard
 
 ```
@@ -190,7 +209,8 @@ In Claude Code:
 Google Drive/
 └── Literature/
     ├── .litrev/
-    │   └── config.yaml          # Project configuration
+    │   ├── config.yaml          # Project configuration
+    │   └── literature.duckdb    # RAG vector index (auto-created)
     ├── MEAS-ERR/                # Project directory
     │   ├── _notes/              # Saved insights
     │   │   ├── 2024-01-15_consensus_simex_methods.md
@@ -312,13 +332,18 @@ litrev-mcp/
 │       ├── eric.py         # ERIC search
 │       ├── insights.py     # Knowledge base
 │       ├── status.py       # Dashboard tools
-│       └── setup.py        # Setup wizard
+│       ├── setup.py        # Setup wizard
+│       ├── pdf.py          # PDF processing
+│       ├── rag.py          # RAG search tools
+│       ├── rag_db.py       # DuckDB operations
+│       └── rag_embed.py    # Embeddings & chunking
 ├── tests/
 │   ├── test_zotero.py
 │   ├── test_search_apis.py
 │   ├── test_insights.py
 │   ├── test_status.py
-│   └── test_setup.py
+│   ├── test_setup.py
+│   └── test_rag.py
 ├── pyproject.toml
 └── README.md
 ```

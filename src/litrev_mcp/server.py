@@ -49,6 +49,12 @@ from litrev_mcp.tools.setup import (
     setup_create_project,
 )
 from litrev_mcp.tools.pdf import process_pdf_inbox, migrate_zotero_attachments
+from litrev_mcp.tools.rag import (
+    index_papers,
+    search_papers,
+    ask_papers,
+    rag_status,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -519,6 +525,90 @@ async def list_tools() -> list[Tool]:
                 "required": ["project"],
             },
         ),
+        # RAG (Literature Search) tools
+        Tool(
+            name="index_papers",
+            description="Index PDFs from a project for semantic search. Extracts text, chunks it, generates OpenAI embeddings, and stores in DuckDB. Run this before using search_papers or ask_papers.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {
+                        "type": "string",
+                        "description": "Project code (e.g., 'MI-IC')",
+                    },
+                    "force_reindex": {
+                        "type": "boolean",
+                        "description": "If true, reindex papers even if already indexed (default false)",
+                        "default": False,
+                    },
+                },
+                "required": ["project"],
+            },
+        ),
+        Tool(
+            name="search_papers",
+            description="Semantic search across indexed paper PDFs. Returns relevant passages with citation keys and page numbers. Use index_papers first to build the index.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Natural language search query",
+                    },
+                    "project": {
+                        "type": "string",
+                        "description": "Limit to specific project (optional)",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum results to return (default 10, max 50)",
+                        "default": 10,
+                        "minimum": 1,
+                        "maximum": 50,
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="ask_papers",
+            description="Ask a question about your literature. Searches indexed papers and returns relevant passages formatted with citations for synthesis. Use this for questions like 'Is there support for X in my literature?'",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "Natural language question about your papers",
+                    },
+                    "project": {
+                        "type": "string",
+                        "description": "Limit to specific project (optional)",
+                    },
+                    "max_passages": {
+                        "type": "integer",
+                        "description": "Number of relevant passages to include (default 5, max 20)",
+                        "default": 5,
+                        "minimum": 1,
+                        "maximum": 20,
+                    },
+                },
+                "required": ["question"],
+            },
+        ),
+        Tool(
+            name="rag_status",
+            description="Get RAG index status and statistics. Shows which papers are indexed and chunk counts.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {
+                        "type": "string",
+                        "description": "Limit to specific project (optional)",
+                    },
+                },
+                "required": [],
+            },
+        ),
     ]
 
 
@@ -689,6 +779,36 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
     if name == "migrate_zotero_attachments":
         result = await migrate_zotero_attachments(
+            project=arguments.get("project"),
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    # RAG (Literature Search) tools
+    if name == "index_papers":
+        result = await index_papers(
+            project=arguments.get("project"),
+            force_reindex=arguments.get("force_reindex", False),
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "search_papers":
+        result = await search_papers(
+            query=arguments.get("query"),
+            project=arguments.get("project"),
+            max_results=arguments.get("max_results", 10),
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "ask_papers":
+        result = await ask_papers(
+            question=arguments.get("question"),
+            project=arguments.get("project"),
+            max_passages=arguments.get("max_passages", 5),
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "rag_status":
+        result = await rag_status(
             project=arguments.get("project"),
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]

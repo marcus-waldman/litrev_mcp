@@ -10,7 +10,7 @@
     <div class="container">
         <header>
             <h1>litrev-mcp Reference Guide</h1>
-            <p class="subtitle">AI-Assisted Literature Review with Zotero, PubMed, and Semantic Scholar</p>
+            <p class="subtitle">AI-Assisted Literature Review with Zotero, PubMed, Semantic Scholar, and RAG Search</p>
 
             <div class="search-bar">
                 <input type="text" id="search" placeholder="Search tools, commands, or topics...">
@@ -47,7 +47,10 @@
                         <strong>Set environment variables</strong>
                         <pre><code># Add to ~/.bashrc or ~/.zshrc
 export ZOTERO_API_KEY="your-api-key-here"
-export ZOTERO_USER_ID="your-user-id-here"</code></pre>
+export ZOTERO_USER_ID="your-user-id-here"
+
+# Optional: For RAG semantic search over PDFs
+export OPENAI_API_KEY="your-openai-key"</code></pre>
                     </li>
                     <li>
                         <strong>Configure Claude Code</strong>
@@ -243,6 +246,26 @@ export ZOTERO_USER_ID="your-user-id-here"</code></pre>
                     </div>
                 </div>
 
+                <h3>RAG Literature Search</h3>
+                <div class="prompt-group">
+                    <div class="prompt-box">
+                        <code>Index my PROJECT for semantic search</code>
+                        <button class="copy-btn" data-text="Index my PROJECT for semantic search">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Search my papers for "QUERY"</code>
+                        <button class="copy-btn" data-text='Search my papers for "QUERY"'>Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Based on my literature, is there support for X?</code>
+                        <button class="copy-btn" data-text="Based on my literature, is there support for X?">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>What does my PROJECT index contain?</code>
+                        <button class="copy-btn" data-text="What does my PROJECT index contain?">Copy</button>
+                    </div>
+                </div>
+
                 <h3>Writing Support</h3>
                 <div class="prompt-group">
                     <div class="prompt-box">
@@ -259,7 +282,7 @@ export ZOTERO_USER_ID="your-user-id-here"</code></pre>
             <!-- Tool Reference -->
             <section id="tools">
                 <h2>🛠️ Tool Reference</h2>
-                <p>All 23 MCP tools organized by category:</p>
+                <p>All 27 MCP tools organized by category:</p>
 
                 <h3>Zotero Integration (9 tools)</h3>
                 <table class="tool-table">
@@ -386,6 +409,39 @@ export ZOTERO_USER_ID="your-user-id-here"</code></pre>
                             <td><code>list_insights</code></td>
                             <td>List all insights for a project</td>
                             <td><code>project</code>, <code>source</code> (optional)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>RAG Literature Search (4 tools)</h3>
+                <table class="tool-table">
+                    <thead>
+                        <tr>
+                            <th>Tool</th>
+                            <th>What it does</th>
+                            <th>Key Parameters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>index_papers</code></td>
+                            <td>Index PDFs for semantic search (extracts text, chunks, generates embeddings)</td>
+                            <td><code>project</code>, <code>force_reindex</code> (optional)</td>
+                        </tr>
+                        <tr>
+                            <td><code>search_papers</code></td>
+                            <td>Semantic search across indexed papers, returns passages with citations</td>
+                            <td><code>query</code>, <code>project</code> (optional), <code>max_results</code> (default: 10)</td>
+                        </tr>
+                        <tr>
+                            <td><code>ask_papers</code></td>
+                            <td>Ask questions about your literature, returns formatted passages for synthesis</td>
+                            <td><code>question</code>, <code>project</code> (optional), <code>max_passages</code> (default: 5)</td>
+                        </tr>
+                        <tr>
+                            <td><code>rag_status</code></td>
+                            <td>View indexing status and statistics</td>
+                            <td><code>project</code> (optional)</td>
                         </tr>
                     </tbody>
                 </table>
@@ -562,6 +618,32 @@ Start with a key paper
 └──────────────┘
                 </pre>
 
+                <h3>RAG Literature Search</h3>
+                <pre class="workflow-diagram">
+┌──────────────┐
+│  Index       │  Extract PDF text, chunk, embed
+│  Papers      │  Stored in literature.duckdb
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│   Search     │  "AIC correction for missing data"
+│   Papers     │  Returns passages with citations
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│    Ask       │  "Is there support for FIML over MI?"
+│   Papers     │  Formatted context for Claude synthesis
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│  Synthesize  │  Claude combines passages
+│   Answer     │  with proper citations
+└──────────────┘
+                </pre>
+
                 <h3>Common Scenarios</h3>
 
                 <details>
@@ -685,10 +767,39 @@ Start with a key paper
                     <li>Add keys to environment: <code>export NCBI_API_KEY="..." SEMANTIC_SCHOLAR_API_KEY="..."</code></li>
                     <li>Wait a few minutes and try again</li>
                 </ul>
+
+                <h3>RAG search not working</h3>
+                <p><strong>Problem:</strong> "OPENAI_API_KEY not set" or embedding errors</p>
+                <p><strong>Solutions:</strong></p>
+                <ol>
+                    <li>Get API key from <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI</a></li>
+                    <li>Add to shell config: <code>export OPENAI_API_KEY="your-key"</code></li>
+                    <li>Reload shell: <code>source ~/.bashrc</code></li>
+                    <li>Restart Claude Code</li>
+                </ol>
+
+                <h3>Papers not being indexed</h3>
+                <p><strong>Problem:</strong> "No PDF found" for papers during indexing</p>
+                <p><strong>Solutions:</strong></p>
+                <ol>
+                    <li>Ensure PDFs are in the project folder (e.g., <code>Literature/PROJECT/</code>)</li>
+                    <li>PDFs must be named with citation key (e.g., <code>smith_glucose_2020.pdf</code>)</li>
+                    <li>Run <code>process_pdf_inbox</code> to auto-rename PDFs</li>
+                    <li>Check that Better BibTeX is generating citation keys in Zotero</li>
+                </ol>
+
+                <h3>Scanned PDFs not searchable</h3>
+                <p><strong>Problem:</strong> "PDF has no extractable text"</p>
+                <p><strong>Solutions:</strong></p>
+                <ul>
+                    <li>Scanned/image-only PDFs cannot be indexed (OCR limitation)</li>
+                    <li>Try to obtain a text-based version of the PDF</li>
+                    <li>Use OCR software to create a searchable PDF first</li>
+                </ul>
             </section>
 
             <footer>
-                <p>Built with litrev-mcp v0.1.0 | <a href="https://github.com/marcus-waldman/litrev_mcp" target="_blank">GitHub</a></p>
+                <p>Built with litrev-mcp v0.2.0 | <a href="https://github.com/marcus-waldman/litrev_mcp" target="_blank">GitHub</a></p>
             </footer>
         </main>
     </div>
