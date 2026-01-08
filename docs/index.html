@@ -21,7 +21,9 @@
         <nav class="toc">
             <h3>Contents</h3>
             <ul>
+                <li><a href="#prerequisites">Prerequisites</a></li>
                 <li><a href="#quick-start">Quick Start</a></li>
+                <li><a href="#multi-machine">Multi-Machine Setup</a></li>
                 <li><a href="#messy-zotero">I Have a Messy Zotero</a></li>
                 <li><a href="#cheat-sheet">Cheat Sheet</a></li>
                 <li><a href="#tools">Tool Reference</a></li>
@@ -31,55 +33,238 @@
         </nav>
 
         <main>
+            <!-- Prerequisites -->
+            <section id="prerequisites">
+                <h2>📋 Prerequisites</h2>
+                <p>Before installing litrev-mcp, ensure you have everything needed:</p>
+
+                <h3>Required for All Features</h3>
+                <ul>
+                    <li><strong>Python 3.10+</strong> - <a href="https://www.python.org/downloads/" target="_blank">Download</a></li>
+                    <li><strong>Zotero desktop application</strong> - <a href="https://www.zotero.org/download/" target="_blank">Download</a></li>
+                    <li><strong>Better BibTeX plugin</strong> (required, not optional)</li>
+                    <li><strong>Google Drive</strong> (mounted/synced)</li>
+                    <li><strong>Zotero API Key & User ID</strong></li>
+                </ul>
+
+                <h3>Required for RAG Literature Search</h3>
+                <ul>
+                    <li><strong>OpenAI API Key</strong> - <a href="https://platform.openai.com/api-keys" target="_blank">Get one</a>
+                        <ul>
+                            <li>Used for: <code>index_papers</code>, <code>search_papers</code>, <code>ask_papers</code></li>
+                            <li>Costs: ~$0.10-0.50 per paper indexed, ~$0.001 per search</li>
+                        </ul>
+                    </li>
+                </ul>
+
+                <h3>Optional (Improves Performance)</h3>
+                <ul>
+                    <li><strong>NCBI API Key</strong> - Increases PubMed rate limits (3→10 req/sec)</li>
+                    <li><strong>Semantic Scholar API Key</strong> - Increases S2 rate limits (100→5000 req/5min)</li>
+                </ul>
+
+                <h3>Better BibTeX Setup</h3>
+                <p><strong>Better BibTeX is required</strong> for citation keys to work:</p>
+                <ol>
+                    <li>In Zotero, go to <strong>Tools → Add-ons</strong></li>
+                    <li>Click the gear icon → <strong>Install Add-on From File...</strong></li>
+                    <li>Download <a href="https://retorque.re/zotero-better-bibtex/installation/" target="_blank">Better BibTeX .xpi file</a></li>
+                    <li>Restart Zotero</li>
+                </ol>
+                <p><strong>Verify:</strong> Go to <strong>Zotero → Preferences → Better BibTeX</strong> and you should see the settings panel.</p>
+                <p style="color: #e74c3c;"><strong>If missing:</strong> You'll see errors like "citation key not found"</p>
+
+                <h3>Zotero Credentials</h3>
+                <p>You need both API Key and User ID:</p>
+
+                <h4>Get your API Key:</h4>
+                <ol>
+                    <li>Go to <a href="https://www.zotero.org/settings/keys" target="_blank">https://www.zotero.org/settings/keys</a></li>
+                    <li>Click <strong>Create new private key</strong></li>
+                    <li>Name: "litrev-mcp"</li>
+                    <li>Permissions: Check "Allow library access" and "Allow write access"</li>
+                    <li>Click <strong>Save Key</strong> and copy it (won't see it again)</li>
+                </ol>
+
+                <h4>Find your User ID:</h4>
+                <ul>
+                    <li>Shown at the top of the same page: "Your userID for use in API calls is <strong>1234567</strong>"</li>
+                    <li>Or in your Zotero profile URL: <code>https://www.zotero.org/USERNAME</code></li>
+                </ul>
+
+                <h3>Google Drive Folder Setup</h3>
+                <p>Create the Literature folder for PDF storage and config sync:</p>
+
+                <h4>macOS:</h4>
+                <pre><code>mkdir -p ~/Library/CloudStorage/GoogleDrive-*/My\ Drive/Literature</code></pre>
+
+                <h4>Linux:</h4>
+                <pre><code>mkdir -p ~/google-drive/Literature</code></pre>
+
+                <h4>Windows:</h4>
+                <p>Open File Explorer and create:</p>
+                <ul>
+                    <li><code>G:\My Drive\Literature</code> (if G: is your Google Drive)</li>
+                    <li>OR <code>C:\Users\YourName\Google Drive\Literature</code> (depends on your setup)</li>
+                    <li><em>Find your Google Drive location by right-clicking the Google Drive icon in system tray</em></li>
+                </ul>
+
+                <p><strong>litrev-mcp will auto-create:</strong></p>
+                <ul>
+                    <li><code>Literature/.litrev/</code> - Config folder</li>
+                    <li><code>Literature/.litrev/config.yaml</code> - Main config file</li>
+                    <li><code>Literature/.litrev/literature.duckdb</code> - RAG search database</li>
+                </ul>
+            </section>
+
             <!-- Quick Start -->
             <section id="quick-start">
-                <h2>⚡ Quick Start (5 minutes)</h2>
-                <ol>
-                    <li>
-                        <strong>Install litrev-mcp</strong>
-                        <pre><code>uv tool install git+https://github.com/marcus-waldman/litrev_mcp.git</code></pre>
-                    </li>
-                    <li>
-                        <strong>Get Zotero credentials</strong>
-                        <p>Visit <a href="https://www.zotero.org/settings/keys" target="_blank">https://www.zotero.org/settings/keys</a> and create a new key with library access, notes access, and write access.</p>
-                    </li>
-                    <li>
-                        <strong>Set environment variables</strong>
-                        <pre><code># Add to ~/.bashrc or ~/.zshrc
-export ZOTERO_API_KEY="your-api-key-here"
-export ZOTERO_USER_ID="your-user-id-here"
+                <h2>⚡ Quick Start</h2>
 
-# Optional: For RAG semantic search over PDFs
-export OPENAI_API_KEY="your-openai-key"</code></pre>
+                <h3>1. Install litrev-mcp</h3>
+                <pre><code>uv tool install git+https://github.com/marcus-waldman/litrev_mcp.git</code></pre>
+
+                <h3>2. Set Environment Variables</h3>
+                <p>Add to your shell configuration (<code>~/.bashrc</code>, <code>~/.zshrc</code>, etc):</p>
+
+                <pre><code># Required for all features
+export ZOTERO_API_KEY="your-api-key-here"         # From https://www.zotero.org/settings/keys
+export ZOTERO_USER_ID="your-user-id-here"        # Numeric ID from same page
+
+# Required for RAG features (index_papers, search_papers, ask_papers)
+export OPENAI_API_KEY="your-openai-key"  # Get from https://platform.openai.com/api-keys
+
+# Optional - improves rate limits
+export NCBI_API_KEY="your-ncbi-key"           # Get from https://www.ncbi.nlm.nih.gov/account/
+export SEMANTIC_SCHOLAR_API_KEY="your-s2-key"  # Get from https://www.semanticscholar.org/product/api
+
+# Optional - override Google Drive detection (Windows users especially)
+export LITREV_DRIVE_PATH="/path/to/your/Google Drive"</code></pre>
+
+                <h4>Reload your shell configuration:</h4>
+                <p><strong>bash</strong> (most Linux, older macOS):</p>
+                <pre><code>source ~/.bashrc
+# OR restart your terminal</code></pre>
+
+                <p><strong>zsh</strong> (newer macOS, some Linux):</p>
+                <pre><code>source ~/.zshrc
+# OR restart your terminal</code></pre>
+
+                <p><strong>Windows Git Bash / MSYS</strong>:</p>
+                <pre><code>source ~/.bashrc
+# OR restart your terminal</code></pre>
+
+                <p><strong>Verify:</strong> Open a NEW terminal and run <code>echo $ZOTERO_API_KEY</code> - it should show your key.</p>
+
+                <h3>3. Configure Claude Code</h3>
+                <p>Add the MCP server:</p>
+                <pre><code>claude mcp add litrev -- litrev-mcp</code></pre>
+
+                <h3>4. Verify Setup</h3>
+                <p>In Claude Code:</p>
+                <div class="prompt-box">
+                    <code>Use setup_check to verify my configuration</code>
+                    <button class="copy-btn" data-text="Use setup_check to verify my configuration">Copy</button>
+                </div>
+
+                <p><strong>✓ Verify This Step:</strong></p>
+                <ul>
+                    <li>After Python install: <code>python --version</code> (should show 3.10+)</li>
+                    <li>After Zotero: Check Better BibTeX in Tools → Add-ons</li>
+                    <li>After env vars: <code>echo $ZOTERO_API_KEY</code> in new terminal</li>
+                    <li>After MCP add: <code>claude mcp list</code> shows litrev as Connected</li>
+                    <li>After setup_check: All checks pass</li>
+                </ul>
+
+                <h3>5. Install Skill (Optional)</h3>
+                <p>For collaborative project context setup:</p>
+                <pre><code># Create global skills folder if it doesn't exist
+mkdir -p ~/.claude/skills
+
+# Copy the skill
+cp -r skills/init-litrev-context ~/.claude/skills/</code></pre>
+                <p>Restart Claude Code and use <code>/init-litrev-context PROJECT</code> for setup.</p>
+            </section>
+
+            <!-- Multi-Machine Setup -->
+            <section id="multi-machine">
+                <h2>🖥️ Setting Up on Additional Machines</h2>
+                <p>Already have litrev-mcp on one machine? Here's how to set up on another:</p>
+
+                <h3>What Syncs vs What Doesn't</h3>
+                <table class="tool-table">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Syncs?</th>
+                            <th>Location</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Config file</td>
+                            <td>✅ Yes</td>
+                            <td><code>Literature/.litrev/config.yaml</code></td>
+                        </tr>
+                        <tr>
+                            <td>PDFs</td>
+                            <td>✅ Yes</td>
+                            <td><code>Literature/{PROJECT}/</code></td>
+                        </tr>
+                        <tr>
+                            <td>Notes</td>
+                            <td>✅ Yes</td>
+                            <td><code>Literature/{PROJECT}/_notes/</code></td>
+                        </tr>
+                        <tr>
+                            <td>DuckDB index</td>
+                            <td>❌ No (per-machine)</td>
+                            <td><code>Literature/.litrev/literature.duckdb</code></td>
+                        </tr>
+                        <tr>
+                            <td>Environment vars</td>
+                            <td>❌ No (per-machine)</td>
+                            <td><code>~/.bashrc</code> or <code>~/.zshrc</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Setup Steps</h3>
+                <ol>
+                    <li><strong>Install prerequisites</strong> (Python, Zotero, Better BibTeX, Google Drive)</li>
+                    <li><strong>Wait for Google Drive sync</strong>
+                        <ul>
+                            <li>Ensure <code>Literature/</code> folder and contents are synced</li>
+                            <li>Check <code>Literature/.litrev/config.yaml</code> exists</li>
+                        </ul>
                     </li>
-                    <li>
-                        <strong>Configure Claude Code</strong>
-                        <p>Add the MCP server to Claude Code:</p>
+                    <li><strong>Install litrev-mcp</strong>
+                        <pre><code>uv tool install litrev-mcp</code></pre>
+                    </li>
+                    <li><strong>Set environment variables</strong> (per-machine, not synced)
+                        <pre><code>export ZOTERO_API_KEY="your-key"
+export ZOTERO_USER_ID="your-id"
+export OPENAI_API_KEY="your-key"  # if using RAG
+source ~/.bashrc  # or ~/.zshrc</code></pre>
+                    </li>
+                    <li><strong>Add MCP server</strong>
                         <pre><code>claude mcp add litrev -- litrev-mcp</code></pre>
                     </li>
-                    <li>
-                        <strong>Restart Claude Code and verify</strong>
+                    <li><strong>Verify</strong>
                         <div class="prompt-box">
-                            <code>Use litrev_hello to verify the server is working</code>
-                            <button class="copy-btn" data-text="Use litrev_hello to verify the server is working">Copy</button>
-                        </div>
-                        <div class="prompt-box">
-                            <code>Use setup_check to verify my configuration</code>
-                            <button class="copy-btn" data-text="Use setup_check to verify my configuration">Copy</button>
+                            <code>Use setup_check</code>
+                            <button class="copy-btn" data-text="Use setup_check">Copy</button>
                         </div>
                     </li>
-                    <li>
-                        <strong>(Optional) Enable Google Drive links</strong>
-                        <p>To automatically add Google Drive PDF links to Zotero entries:</p>
-                        <ol type="a">
-                            <li>Create a Google Cloud project at <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a></li>
-                            <li>Enable the Google Drive API</li>
-                            <li>Create OAuth credentials (Desktop app type)</li>
-                            <li>Download <code>credentials.json</code> to <code>Literature/.litrev/credentials.json</code></li>
-                        </ol>
-                        <p><em>First use will prompt browser authentication. Tokens are stored locally in <code>~/.litrev-mcp/token.json</code>.</em></p>
+                    <li><strong>Reindex papers</strong> (DuckDB doesn't sync)
+                        <div class="prompt-box">
+                            <code>Use index_papers for project "PROJECT-CODE"</code>
+                            <button class="copy-btn" data-text='Use index_papers for project "PROJECT-CODE"'>Copy</button>
+                        </div>
                     </li>
                 </ol>
+
+                <p><strong>That's it!</strong> Your config, PDFs, and notes are already synced from the first machine.</p>
             </section>
 
             <!-- Messy Zotero -->
@@ -282,7 +467,7 @@ export OPENAI_API_KEY="your-openai-key"</code></pre>
             <!-- Tool Reference -->
             <section id="tools">
                 <h2>🛠️ Tool Reference</h2>
-                <p>All 27 MCP tools organized by category:</p>
+                <p>All 29 MCP tools organized by category:</p>
 
                 <h3>Zotero Integration (9 tools)</h3>
                 <table class="tool-table">
@@ -435,8 +620,8 @@ export OPENAI_API_KEY="your-openai-key"</code></pre>
                         </tr>
                         <tr>
                             <td><code>ask_papers</code></td>
-                            <td>Ask questions about your literature, returns formatted passages for synthesis</td>
-                            <td><code>question</code>, <code>project</code> (optional), <code>max_passages</code> (default: 5)</td>
+                            <td>Ask questions about your literature; uses Claude to synthesize a reasoned answer with honest assessment of coverage adequacy and recommendations for follow-up searches when gaps exist</td>
+                            <td><code>question</code>, <code>project</code> (optional), <code>max_passages</code> (default: 10)</td>
                         </tr>
                         <tr>
                             <td><code>rag_status</code></td>
@@ -721,15 +906,32 @@ Start with a key paper
             <section id="troubleshooting">
                 <h2>🔧 Troubleshooting</h2>
 
-                <h3>Server not responding</h3>
-                <p><strong>Problem:</strong> Claude Code doesn't show litrev-mcp tools</p>
-                <p><strong>Solutions:</strong></p>
-                <ol>
-                    <li>Verify installation: <code>which litrev-mcp</code> (should show path)</li>
-                    <li>Check Claude Code MCP config is correct (see Quick Start)</li>
-                    <li>Restart Claude Code completely</li>
-                    <li>Test server directly: <code>python -m litrev_mcp.server</code></li>
-                </ol>
+                <h3>"citation key not found"</h3>
+                <p><strong>Cause:</strong> Better BibTeX not installed</p>
+                <p><strong>Fix:</strong> Install Better BibTeX plugin in Zotero (see <a href="#prerequisites">Prerequisites</a>)</p>
+
+                <h3>"OPENAI_API_KEY not set" when using ask_papers</h3>
+                <p><strong>Cause:</strong> OpenAI key required for RAG features</p>
+                <p><strong>Fix:</strong> Set <code>export OPENAI_API_KEY="your-key"</code> and reload shell</p>
+
+                <h3>"Failed to connect to litrev MCP server"</h3>
+                <p><strong>Cause:</strong> Python environment mismatch or server crashed</p>
+                <p><strong>Fix:</strong> Remove and re-add with full path:</p>
+                <pre><code>claude mcp remove litrev
+claude mcp add litrev -- /full/path/to/.venv/Scripts/python.exe -m litrev_mcp.server</code></pre>
+                <p>Or check server health: <code>python -m litrev_mcp.server</code></p>
+
+                <h3>Windows: "Cannot find Google Drive"</h3>
+                <p><strong>Cause:</strong> Drive letter varies by machine</p>
+                <p><strong>Fix:</strong> Set explicitly:</p>
+                <pre><code>export LITREV_DRIVE_PATH="C:/Users/YourName/Google Drive"</code></pre>
+
+                <h3>"Database too large"</h3>
+                <p><strong>Cause:</strong> Using default 1536 dimensions with 500+ papers</p>
+                <p><strong>Fix:</strong> Edit <code>Literature/.litrev/config.yaml</code>:</p>
+                <pre><code>rag:
+  embedding_dimensions: 512</code></pre>
+                <p>Then delete <code>literature.duckdb</code> and reindex. Reduces storage by ~66% with minimal quality impact.</p>
 
                 <h3>Google Drive path not detected</h3>
                 <p><strong>Problem:</strong> "Google Drive path not detected" error</p>
@@ -821,27 +1023,19 @@ Start with a key paper
                     <li>Use OCR software to create a searchable PDF first</li>
                 </ul>
 
-                <h3>RAG storage optimization</h3>
-                <p><strong>Problem:</strong> Database growing too large with many papers</p>
-                <p><strong>Solution:</strong> Reduce embedding dimensions in <code>config.yaml</code>:</p>
-                <pre><code># Literature/.litrev/config.yaml
-rag:
-  embedding_dimensions: 512  # Default is 1536</code></pre>
-                <table>
-                    <thead>
-                        <tr><th>Dimensions</th><th>Storage/chunk</th><th>Accuracy</th><th>Use case</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr><td>1536 (default)</td><td>~6 KB</td><td>Best</td><td>Small collections</td></tr>
-                        <tr><td>512</td><td>~2 KB</td><td>~95%</td><td>Large collections</td></tr>
-                        <tr><td>256</td><td>~1 KB</td><td>~90%</td><td>Very large collections</td></tr>
-                    </tbody>
-                </table>
-                <p><em>Note: Changing dimensions requires deleting <code>literature.duckdb</code> and re-indexing all papers.</em></p>
+                <h3>Server not responding</h3>
+                <p><strong>Problem:</strong> Claude Code doesn't show litrev-mcp tools</p>
+                <p><strong>Solutions:</strong></p>
+                <ol>
+                    <li>Verify installation: <code>which litrev-mcp</code> (should show path)</li>
+                    <li>Check Claude Code MCP config is correct</li>
+                    <li>Restart Claude Code completely</li>
+                    <li>Test server directly: <code>python -m litrev_mcp.server</code></li>
+                </ol>
             </section>
 
             <footer>
-                <p>Built with litrev-mcp v0.2.1 | <a href="https://github.com/marcus-waldman/litrev_mcp" target="_blank">GitHub</a></p>
+                <p>Built with litrev-mcp v0.2.2 | <a href="https://github.com/marcus-waldman/litrev_mcp" target="_blank">GitHub</a></p>
             </footer>
         </main>
     </div>
