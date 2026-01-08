@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>litrev-mcp: Indexing Progress</title>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --accent: #0f3460;
+            --highlight: #e94560;
+            --text-primary: #eee;
+            --text-secondary: #aaa;
+            --success: #4ade80;
+            --warning: #facc15;
+            --error: #ef4444;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        h1 { font-size: 1.5rem; font-weight: 600; }
+
+        .project-badge {
+            background: var(--accent);
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        /* Overall Progress */
+        .progress-section {
+            background: var(--bg-secondary);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .progress-stats {
+            display: flex;
+            gap: 2rem;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .stat { display: flex; gap: 0.5rem; }
+        .stat-value { color: var(--text-primary); font-weight: 600; }
+        .stat-value.success { color: var(--success); }
+        .stat-value.warning { color: var(--warning); }
+        .stat-value.error { color: var(--error); }
+
+        .progress-bar-container {
+            background: var(--accent);
+            border-radius: 0.5rem;
+            height: 1.5rem;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--highlight), #ff6b8a);
+            transition: width 0.3s ease;
+            border-radius: 0.5rem;
+        }
+
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        /* Timing */
+        .timing {
+            display: flex;
+            gap: 2rem;
+            margin-top: 1rem;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        #eta {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        /* Active Tasks */
+        .active-tasks h2 {
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            color: var(--text-secondary);
+        }
+
+        .task-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .task-item {
+            background: var(--accent);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .task-info {
+            min-width: 0;
+        }
+
+        .task-title {
+            font-size: 0.875rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .task-citation {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            font-family: monospace;
+        }
+
+        .task-stage {
+            padding: 0.25rem 0.75rem;
+            border-radius: 0.25rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .stage-pending { background: #6b7280; }
+        .stage-extracting { background: var(--warning); color: #000; }
+        .stage-chunking { background: #3b82f6; }
+        .stage-embedding { background: #8b5cf6; }
+        .stage-saving { background: var(--success); color: #000; }
+
+        .empty-state {
+            color: var(--text-secondary);
+            font-style: italic;
+            padding: 0.5rem 0;
+        }
+
+        /* Recent Completed */
+        .recent-section {
+            background: var(--bg-secondary);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+        }
+
+        .recent-section h2 {
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            color: var(--text-secondary);
+        }
+
+        .recent-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--accent);
+            font-size: 0.875rem;
+        }
+
+        .recent-item:last-child { border-bottom: none; }
+
+        .recent-title {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 70%;
+        }
+
+        .status-complete { color: var(--success); }
+        .status-skipped { color: var(--warning); }
+        .status-error { color: var(--error); }
+
+        /* Connection status */
+        .connection-status {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.75rem;
+        }
+
+        .connected { background: var(--success); color: #000; }
+        .disconnected { background: var(--error); }
+        .reconnecting { background: var(--warning); color: #000; }
+
+        /* Complete State */
+        .complete-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .complete-card {
+            background: var(--bg-secondary);
+            padding: 3rem;
+            border-radius: 1rem;
+            text-align: center;
+            max-width: 500px;
+        }
+
+        .complete-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            color: var(--success);
+        }
+
+        .complete-message {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .complete-summary {
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+
+        .close-hint {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        /* Animation */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .stage-embedding {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Indexing Papers</h1>
+            <span class="project-badge" id="project">--</span>
+        </header>
+
+        <!-- Overall Progress -->
+        <div class="progress-section">
+            <div class="progress-header">
+                <div class="progress-stats">
+                    <div class="stat">
+                        <span>Completed:</span>
+                        <span class="stat-value success" id="completed">0</span>
+                    </div>
+                    <div class="stat">
+                        <span>Skipped:</span>
+                        <span class="stat-value warning" id="skipped">0</span>
+                    </div>
+                    <div class="stat">
+                        <span>Errors:</span>
+                        <span class="stat-value error" id="errors">0</span>
+                    </div>
+                </div>
+                <div id="eta">--</div>
+            </div>
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+                <span class="progress-text" id="progressText">0 / 0</span>
+            </div>
+            <div class="timing">
+                <span id="elapsed">Elapsed: 0:00</span>
+                <span id="rate">-- papers/min</span>
+            </div>
+        </div>
+
+        <!-- Active Tasks -->
+        <div class="progress-section active-tasks">
+            <h2>Currently Processing</h2>
+            <div class="task-list" id="activeTasks">
+                <div class="empty-state">Waiting to start...</div>
+            </div>
+        </div>
+
+        <!-- Recent Completed -->
+        <div class="recent-section">
+            <h2>Recently Completed</h2>
+            <div id="recentList">
+                <div class="empty-state">No papers completed yet</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="connection-status connected" id="connectionStatus">Connected</div>
+
+    <div class="complete-overlay" id="completeOverlay" style="display: none">
+        <div class="complete-card">
+            <div class="complete-icon">&#10003;</div>
+            <div class="complete-message">Indexing Complete!</div>
+            <div class="complete-summary" id="completeSummary">--</div>
+            <div class="close-hint">This window will close automatically in a few seconds...</div>
+        </div>
+    </div>
+
+    <script>
+        const WS_URL = `ws://${window.location.host}/ws`;
+        let ws = null;
+        let startTime = null;
+        let elapsedInterval = null;
+
+        function connect() {
+            updateConnectionStatus('reconnecting');
+            ws = new WebSocket(WS_URL);
+
+            ws.onopen = () => {
+                updateConnectionStatus('connected');
+            };
+
+            ws.onclose = () => {
+                updateConnectionStatus('disconnected');
+                setTimeout(connect, 2000);
+            };
+
+            ws.onerror = () => {
+                updateConnectionStatus('disconnected');
+            };
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'state' || msg.type === 'update') {
+                    updateUI(msg.data);
+                } else if (msg.type === 'complete') {
+                    showComplete(msg.data);
+                }
+            };
+        }
+
+        function updateConnectionStatus(status) {
+            const el = document.getElementById('connectionStatus');
+            el.className = 'connection-status ' + status;
+            el.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+        }
+
+        function updateUI(state) {
+            // Initialize start time on first update
+            if (!startTime && state.started_at) {
+                startTime = new Date(state.started_at);
+                startElapsedTimer();
+            }
+
+            // Project
+            document.getElementById('project').textContent = state.project;
+
+            // Stats
+            document.getElementById('completed').textContent = state.completed_items;
+            document.getElementById('skipped').textContent = state.skipped_items;
+            document.getElementById('errors').textContent = state.error_items;
+
+            // Progress bar
+            const total = state.total_items || 1;
+            const done = state.completed_items + state.skipped_items + state.error_items;
+            const pct = Math.round((done / total) * 100);
+            document.getElementById('progressBar').style.width = `${pct}%`;
+            document.getElementById('progressText').textContent = `${done} / ${total}`;
+
+            // ETA
+            if (state.estimated_remaining_seconds && state.estimated_remaining_seconds > 0) {
+                const mins = Math.floor(state.estimated_remaining_seconds / 60);
+                const secs = Math.round(state.estimated_remaining_seconds % 60);
+                document.getElementById('eta').textContent = `~${mins}:${secs.toString().padStart(2, '0')} remaining`;
+            } else if (done >= total) {
+                document.getElementById('eta').textContent = 'Complete!';
+            } else {
+                document.getElementById('eta').textContent = 'Calculating...';
+            }
+
+            // Rate
+            if (state.items_per_second > 0) {
+                const perMin = (state.items_per_second * 60).toFixed(1);
+                document.getElementById('rate').textContent = `${perMin} papers/min`;
+            }
+
+            // Active tasks
+            const taskList = document.getElementById('activeTasks');
+            if (state.active_tasks && state.active_tasks.length > 0) {
+                taskList.innerHTML = state.active_tasks.map(task => `
+                    <div class="task-item">
+                        <div class="task-info">
+                            <div class="task-title">${escapeHtml(task.title)}</div>
+                            <div class="task-citation">${escapeHtml(task.citation_key || task.id)}</div>
+                        </div>
+                        <div class="task-stage stage-${task.stage}">${formatStage(task.stage)}</div>
+                    </div>
+                `).join('');
+            } else if (done >= total) {
+                taskList.innerHTML = '<div class="empty-state">All tasks completed</div>';
+            } else {
+                taskList.innerHTML = '<div class="empty-state">Waiting for tasks...</div>';
+            }
+
+            // Recent completed
+            const recentList = document.getElementById('recentList');
+            if (state.recent_completed && state.recent_completed.length > 0) {
+                recentList.innerHTML = state.recent_completed.map(task => `
+                    <div class="recent-item">
+                        <span class="recent-title">${escapeHtml(task.citation_key || task.title)}</span>
+                        <span class="status-${task.stage}">${formatStage(task.stage)}</span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function formatStage(stage) {
+            const labels = {
+                'complete': 'Done',
+                'skipped': 'Skipped',
+                'error': 'Error',
+                'extracting': 'Extracting',
+                'chunking': 'Chunking',
+                'embedding': 'Embedding',
+                'saving': 'Saving',
+                'pending': 'Pending'
+            };
+            return labels[stage] || stage;
+        }
+
+        function startElapsedTimer() {
+            if (elapsedInterval) clearInterval(elapsedInterval);
+            elapsedInterval = setInterval(() => {
+                if (startTime) {
+                    const elapsed = Math.floor((Date.now() - startTime.getTime()) / 1000);
+                    const mins = Math.floor(elapsed / 60);
+                    const secs = elapsed % 60;
+                    document.getElementById('elapsed').textContent = `Elapsed: ${mins}:${secs.toString().padStart(2, '0')}`;
+                }
+            }, 1000);
+        }
+
+        function showComplete(data) {
+            if (elapsedInterval) clearInterval(elapsedInterval);
+            document.getElementById('completeSummary').textContent = data.summary || 'Operation completed';
+            document.getElementById('completeOverlay').style.display = 'flex';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+
+        // Initialize
+        connect();
+    </script>
+</body>
+</html>

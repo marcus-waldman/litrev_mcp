@@ -5,6 +5,7 @@ Provides semantic search over indexed PDF content using OpenAI embeddings
 and DuckDB vector similarity search.
 """
 
+import asyncio
 from pathlib import Path
 from typing import Any, Optional
 
@@ -28,11 +29,14 @@ from litrev_mcp.tools.rag_embed import (
     embed_query,
     EmbeddingError,
 )
+from litrev_mcp.progress import ProgressTracker, TaskStage, progress_server
 
 
 async def index_papers(
     project: str,
     force_reindex: bool = False,
+    show_progress: bool = True,
+    max_concurrent: int = 5,
 ) -> dict[str, Any]:
     """
     Index PDFs from a project for semantic search.
@@ -43,6 +47,8 @@ async def index_papers(
     Args:
         project: Project code (e.g., 'MI-IC')
         force_reindex: If True, reindex papers even if already indexed
+        show_progress: If True, open browser-based progress dashboard
+        max_concurrent: Maximum papers to process concurrently (1-20, default 5)
 
     Returns:
         {
@@ -92,6 +98,9 @@ async def index_papers(
                 }
             }
 
+        # Validate max_concurrent
+        max_concurrent = min(max(1, max_concurrent), 20)
+
         # Get Zotero items for metadata
         zot = get_zotero_client()
         items = zot.collection_items(collection_key, itemType='-attachment')
@@ -99,53 +108,43 @@ async def index_papers(
         # Initialize database connection
         get_connection()
 
-        indexed = []
-        skipped = []
-        errors = []
+        # Create progress tracker
+        tracker = ProgressTracker(
+            operation_type="index_papers",
+            project=project,
+        )
+        tracker.set_total(len(items))
 
-        for item in items:
-            item_data = item.get('data', {})
-            item_key = item_data.get('key')
-            citation_key = get_citation_key_from_extra(item_data.get('extra', ''))
-            title = item_data.get('title', 'Untitled')
-
-            try:
-                result = await _index_single_paper(
-                    item_data=item_data,
+        # Process with or without progress UI
+        if show_progress:
+            async with progress_server(tracker, auto_open_browser=True):
+                results = await _process_papers_parallel(
+                    items=items,
                     project_path=project_path,
                     project=project,
                     force_reindex=force_reindex,
+                    tracker=tracker,
+                    max_concurrent=max_concurrent,
                 )
-
-                if result['status'] == 'indexed':
-                    indexed.append({
-                        'item_key': item_key,
-                        'citation_key': citation_key,
-                        'title': title,
-                        'chunks': result['chunks'],
-                    })
-                elif result['status'] == 'skipped':
-                    skipped.append({
-                        'item_key': item_key,
-                        'citation_key': citation_key,
-                        'reason': result['reason'],
-                    })
-
-            except Exception as e:
-                errors.append({
-                    'item_key': item_key,
-                    'citation_key': citation_key,
-                    'error': str(e),
-                })
-
-        summary = f"Indexed {len(indexed)} papers ({sum(p['chunks'] for p in indexed)} chunks), skipped {len(skipped)}, errors {len(errors)}"
+                summary = f"Indexed {len(results['indexed'])} papers ({sum(p['chunks'] for p in results['indexed'])} chunks), skipped {len(results['skipped'])}, errors {len(results['errors'])}"
+                await tracker.finish(summary)
+                # Brief delay to let browser show completion
+                await asyncio.sleep(1)
+        else:
+            results = await _process_papers_parallel(
+                items=items,
+                project_path=project_path,
+                project=project,
+                force_reindex=force_reindex,
+                tracker=tracker,
+                max_concurrent=max_concurrent,
+            )
+            summary = f"Indexed {len(results['indexed'])} papers ({sum(p['chunks'] for p in results['indexed'])} chunks), skipped {len(results['skipped'])}, errors {len(results['errors'])}"
 
         return {
             'success': True,
             'project': project,
-            'indexed': indexed,
-            'skipped': skipped,
-            'errors': errors,
+            **results,
             'summary': summary,
         }
 
@@ -165,6 +164,201 @@ async def index_papers(
                 'message': str(e)
             }
         }
+
+
+async def _process_papers_parallel(
+    items: list,
+    project_path: Path,
+    project: str,
+    force_reindex: bool,
+    tracker: ProgressTracker,
+    max_concurrent: int = 5,
+) -> dict:
+    """
+    Process papers in parallel with semaphore-controlled concurrency.
+    """
+    semaphore = asyncio.Semaphore(max_concurrent)
+
+    async def process_one(item):
+        async with semaphore:
+            item_data = item.get('data', {})
+            item_key = item_data.get('key')
+            citation_key = get_citation_key_from_extra(item_data.get('extra', ''))
+            title = item_data.get('title', 'Untitled')
+
+            # Register task with tracker
+            await tracker.start_task(item_key, citation_key, title)
+
+            try:
+                result = await _index_single_paper_tracked(
+                    item_data=item_data,
+                    project_path=project_path,
+                    project=project,
+                    force_reindex=force_reindex,
+                    tracker=tracker,
+                )
+
+                if result['status'] == 'indexed':
+                    await tracker.complete_task(item_key, TaskStage.COMPLETE)
+                    return ('indexed', {
+                        'item_key': item_key,
+                        'citation_key': citation_key,
+                        'title': title,
+                        'chunks': result['chunks'],
+                    })
+                else:
+                    await tracker.complete_task(item_key, TaskStage.SKIPPED)
+                    return ('skipped', {
+                        'item_key': item_key,
+                        'citation_key': citation_key,
+                        'reason': result['reason'],
+                    })
+
+            except Exception as e:
+                await tracker.complete_task(
+                    item_key,
+                    TaskStage.ERROR,
+                    error_message=str(e)
+                )
+                return ('error', {
+                    'item_key': item_key,
+                    'citation_key': citation_key,
+                    'error': str(e),
+                })
+
+    # Process all items concurrently
+    tasks = [process_one(item) for item in items]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Categorize results
+    indexed = []
+    skipped = []
+    errors = []
+
+    for result in results:
+        if isinstance(result, Exception):
+            errors.append({'error': str(result)})
+        elif result[0] == 'indexed':
+            indexed.append(result[1])
+        elif result[0] == 'skipped':
+            skipped.append(result[1])
+        elif result[0] == 'error':
+            errors.append(result[1])
+
+    return {'indexed': indexed, 'skipped': skipped, 'errors': errors}
+
+
+async def _index_single_paper_tracked(
+    item_data: dict,
+    project_path: Path,
+    project: str,
+    force_reindex: bool,
+    tracker: ProgressTracker,
+) -> dict:
+    """Index a single paper with progress tracking and async wrappers for blocking calls."""
+    item_key = item_data.get('key')
+    citation_key = get_citation_key_from_extra(item_data.get('extra', ''))
+    title = item_data.get('title', 'Untitled')
+
+    # Check if already indexed
+    if not force_reindex and await asyncio.to_thread(paper_exists, item_key):
+        return {'status': 'skipped', 'reason': 'Already indexed'}
+
+    # Find PDF file
+    pdf_path = None
+    if citation_key:
+        candidate = project_path / f"{citation_key}.pdf"
+        if candidate.exists():
+            pdf_path = candidate
+
+    # If no citation key in Extra, try to generate one from metadata
+    if not pdf_path:
+        authors = format_authors(item_data.get('creators', []))
+        year = item_data.get('date', '')[:4] if item_data.get('date') else ''
+        if title and authors and year:
+            generated_key = generate_citation_key(title, authors, year)
+            candidate = project_path / f"{generated_key}.pdf"
+            if candidate.exists():
+                citation_key = generated_key
+                pdf_path = candidate
+
+    if not pdf_path:
+        return {'status': 'skipped', 'reason': 'No PDF found'}
+
+    # Stage: Extracting
+    await tracker.update_task(item_key, stage=TaskStage.EXTRACTING)
+
+    try:
+        # Wrap blocking pdfplumber call
+        full_text, page_breaks = await asyncio.to_thread(
+            extract_pdf_text_with_pages, pdf_path
+        )
+    except Exception as e:
+        return {'status': 'skipped', 'reason': f'PDF extraction failed: {e}'}
+
+    if not full_text.strip():
+        return {'status': 'skipped', 'reason': 'PDF has no extractable text'}
+
+    # Stage: Chunking
+    await tracker.update_task(item_key, stage=TaskStage.CHUNKING)
+
+    chunks = await asyncio.to_thread(
+        chunk_text, full_text, page_breaks=page_breaks
+    )
+
+    if not chunks:
+        return {'status': 'skipped', 'reason': 'No chunks generated'}
+
+    await tracker.update_task(item_key, chunks_total=len(chunks))
+
+    # Stage: Embedding
+    await tracker.update_task(item_key, stage=TaskStage.EMBEDDING)
+
+    chunk_texts = [c['text'] for c in chunks]
+    # Wrap blocking OpenAI call
+    embeddings = await asyncio.to_thread(embed_texts, chunk_texts)
+
+    # Stage: Saving
+    await tracker.update_task(item_key, stage=TaskStage.SAVING)
+
+    # Delete existing data if reindexing
+    if force_reindex:
+        await asyncio.to_thread(delete_paper, item_key)
+
+    # Insert paper metadata
+    authors = format_authors(item_data.get('creators', []))
+    year = None
+    date_str = item_data.get('date', '')
+    if date_str and len(date_str) >= 4:
+        try:
+            year = int(date_str[:4])
+        except ValueError:
+            pass
+
+    await asyncio.to_thread(
+        insert_paper,
+        item_key=item_key,
+        citation_key=citation_key,
+        title=title,
+        authors=authors,
+        year=year,
+        project=project,
+        pdf_path=str(pdf_path),
+        total_chunks=len(chunks),
+    )
+
+    # Insert chunks with embeddings
+    for chunk, embedding in zip(chunks, embeddings):
+        await asyncio.to_thread(
+            insert_chunk,
+            item_key=item_key,
+            chunk_index=chunk['chunk_index'],
+            page_number=chunk['page_number'],
+            text=chunk['text'],
+            embedding=embedding,
+        )
+
+    return {'status': 'indexed', 'chunks': len(chunks)}
 
 
 async def _index_single_paper(

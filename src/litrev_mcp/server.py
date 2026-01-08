@@ -528,7 +528,7 @@ async def list_tools() -> list[Tool]:
         # RAG (Literature Search) tools
         Tool(
             name="index_papers",
-            description="Index PDFs from a project for semantic search. Extracts text, chunks it, generates OpenAI embeddings, and stores in DuckDB. Run this before using search_papers or ask_papers.",
+            description="Index PDFs from a project for semantic search. Extracts text, chunks it, generates OpenAI embeddings, and stores in DuckDB. Opens a browser-based progress dashboard. Run this before using search_papers or ask_papers.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -540,6 +540,18 @@ async def list_tools() -> list[Tool]:
                         "type": "boolean",
                         "description": "If true, reindex papers even if already indexed (default false)",
                         "default": False,
+                    },
+                    "show_progress": {
+                        "type": "boolean",
+                        "description": "If true, open browser-based progress dashboard (default true)",
+                        "default": True,
+                    },
+                    "max_concurrent": {
+                        "type": "integer",
+                        "description": "Maximum papers to process in parallel (default 5)",
+                        "default": 5,
+                        "minimum": 1,
+                        "maximum": 20,
                     },
                 },
                 "required": ["project"],
@@ -788,6 +800,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         result = await index_papers(
             project=arguments.get("project"),
             force_reindex=arguments.get("force_reindex", False),
+            show_progress=arguments.get("show_progress", True),
+            max_concurrent=arguments.get("max_concurrent", 5),
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
