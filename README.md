@@ -10,7 +10,7 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 
 ✅ **v0.2.2 - Intelligent Literature Synthesis**
 
-- 30 tools across 8 categories
+- 31 tools across 8 categories
 - Full Zotero integration
 - Search APIs (PubMed, Semantic Scholar, ERIC)
 - Knowledge base system
@@ -47,8 +47,9 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 - `analyze_insights` - Answer questions from saved insights
 - `list_insights` - List all insights for a project
 
-### RAG Literature Search (4 tools)
-- `index_papers` - Index PDFs for semantic search (extracts text, chunks, generates OpenAI embeddings)
+### RAG Literature Search (5 tools)
+- `index_papers` - Index PDFs for semantic search (extracts text, chunks, generates OpenAI embeddings). Note: May timeout on large collections; use `generate_index_script` instead
+- `generate_index_script` - Generate a standalone Python script for indexing papers. Recommended for large collections to avoid MCP timeout
 - `search_papers` - Semantic search across indexed papers, returns passages with citations
 - `ask_papers` - Ask questions about your literature; uses Claude to synthesize a reasoned answer with honest assessment of coverage adequacy and recommendations for follow-up searches when gaps exist
 - `rag_status` - View indexing status and statistics

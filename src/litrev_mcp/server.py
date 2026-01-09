@@ -55,6 +55,7 @@ from litrev_mcp.tools.rag import (
     search_papers,
     ask_papers,
     rag_status,
+    generate_index_script,
 )
 from litrev_mcp.tools.context import (
     get_project_context,
@@ -652,6 +653,25 @@ async def list_tools() -> list[Tool]:
                 "required": [],
             },
         ),
+        Tool(
+            name="generate_index_script",
+            description="Generate a standalone Python script for indexing papers. Recommended for large collections to avoid MCP timeout.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {
+                        "type": "string",
+                        "description": "Project code (e.g., 'MI-IC')",
+                    },
+                    "force_reindex": {
+                        "type": "boolean",
+                        "description": "If true, script will reindex all papers",
+                        "default": False,
+                    },
+                },
+                "required": ["project"],
+            },
+        ),
         # Project Context tools
         Tool(
             name="get_project_context",
@@ -897,6 +917,13 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     if name == "rag_status":
         result = await rag_status(
             project=arguments.get("project"),
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "generate_index_script":
+        result = await generate_index_script(
+            project=arguments.get("project"),
+            force_reindex=arguments.get("force_reindex", False),
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 

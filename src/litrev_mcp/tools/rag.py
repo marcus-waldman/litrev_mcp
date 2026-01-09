@@ -17,7 +17,6 @@ from litrev_mcp.tools.rag_db import (
     paper_exists,
     delete_paper,
     insert_paper,
-    insert_chunk,
     insert_chunks_batch,
     search_similar,
     get_indexed_papers,
@@ -30,15 +29,12 @@ from litrev_mcp.tools.rag_embed import (
     embed_query,
     EmbeddingError,
 )
-from litrev_mcp.progress import ProgressTracker, TaskStage, progress_server
 from litrev_mcp.tools.context import get_context_text
 
 
 async def index_papers(
     project: str,
     force_reindex: bool = False,
-    show_progress: bool = True,
-    max_concurrent: int = 5,
 ) -> dict[str, Any]:
     """
     Index PDFs from a project for semantic search.
@@ -46,11 +42,12 @@ async def index_papers(
     Extracts text from PDFs in the project folder, chunks it,
     generates embeddings via OpenAI, and stores in DuckDB.
 
+    Note: For large collections, use generate_index_script() to create a
+    standalone Python script that runs without MCP timeout constraints.
+
     Args:
         project: Project code (e.g., 'MI-IC')
         force_reindex: If True, reindex papers even if already indexed
-        show_progress: If True, open browser-based progress dashboard
-        max_concurrent: Maximum papers to process concurrently (1-20, default 5)
 
     Returns:
         {
@@ -100,9 +97,6 @@ async def index_papers(
                 }
             }
 
-        # Validate max_concurrent
-        max_concurrent = min(max(1, max_concurrent), 20)
-
         # Get Zotero items for metadata
         zot = get_zotero_client()
         items = zot.collection_items(collection_key, itemType='-attachment')
@@ -110,38 +104,16 @@ async def index_papers(
         # Initialize database connection
         get_connection()
 
-        # Create progress tracker
-        tracker = ProgressTracker(
-            operation_type="index_papers",
+        # Process papers sequentially (parallelism provides no benefit - DB writes serialize)
+        results = _index_papers_sequential(
+            items=items,
+            project_path=project_path,
             project=project,
+            force_reindex=force_reindex,
         )
-        tracker.set_total(len(items))
 
-        # Process with or without progress UI
-        if show_progress:
-            async with progress_server(tracker, auto_open_browser=True):
-                results = await _process_papers_parallel(
-                    items=items,
-                    project_path=project_path,
-                    project=project,
-                    force_reindex=force_reindex,
-                    tracker=tracker,
-                    max_concurrent=max_concurrent,
-                )
-                summary = f"Indexed {len(results['indexed'])} papers ({sum(p['chunks'] for p in results['indexed'])} chunks), skipped {len(results['skipped'])}, errors {len(results['errors'])}"
-                await tracker.finish(summary)
-                # Brief delay to let browser show completion
-                await asyncio.sleep(1)
-        else:
-            results = await _process_papers_parallel(
-                items=items,
-                project_path=project_path,
-                project=project,
-                force_reindex=force_reindex,
-                tracker=tracker,
-                max_concurrent=max_concurrent,
-            )
-            summary = f"Indexed {len(results['indexed'])} papers ({sum(p['chunks'] for p in results['indexed'])} chunks), skipped {len(results['skipped'])}, errors {len(results['errors'])}"
+        total_chunks = sum(p['chunks'] for p in results['indexed'])
+        summary = f"Indexed {len(results['indexed'])} papers ({total_chunks} chunks), skipped {len(results['skipped'])}, errors {len(results['errors'])}"
 
         return {
             'success': True,
@@ -168,289 +140,116 @@ async def index_papers(
         }
 
 
-async def _process_papers_parallel(
+def _index_papers_sequential(
     items: list,
     project_path: Path,
     project: str,
     force_reindex: bool,
-    tracker: ProgressTracker,
-    max_concurrent: int = 5,
 ) -> dict:
-    """
-    Process papers in parallel with semaphore-controlled concurrency.
-    """
-    semaphore = asyncio.Semaphore(max_concurrent)
-
-    async def process_one(item):
-        async with semaphore:
-            item_data = item.get('data', {})
-            item_key = item_data.get('key')
-            citation_key = get_citation_key_from_extra(item_data.get('extra', ''))
-            title = item_data.get('title', 'Untitled')
-
-            # Register task with tracker
-            await tracker.start_task(item_key, citation_key, title)
-
-            try:
-                result = await _index_single_paper_tracked(
-                    item_data=item_data,
-                    project_path=project_path,
-                    project=project,
-                    force_reindex=force_reindex,
-                    tracker=tracker,
-                )
-
-                if result['status'] == 'indexed':
-                    await tracker.complete_task(item_key, TaskStage.COMPLETE)
-                    return ('indexed', {
-                        'item_key': item_key,
-                        'citation_key': citation_key,
-                        'title': title,
-                        'chunks': result['chunks'],
-                    })
-                else:
-                    await tracker.complete_task(item_key, TaskStage.SKIPPED)
-                    return ('skipped', {
-                        'item_key': item_key,
-                        'citation_key': citation_key,
-                        'reason': result['reason'],
-                    })
-
-            except Exception as e:
-                await tracker.complete_task(
-                    item_key,
-                    TaskStage.ERROR,
-                    error_message=str(e)
-                )
-                return ('error', {
-                    'item_key': item_key,
-                    'citation_key': citation_key,
-                    'error': str(e),
-                })
-
-    # Process all items concurrently
-    tasks = [process_one(item) for item in items]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    # Categorize results
+    """Process papers sequentially (simpler, just as fast since DB writes serialize)."""
     indexed = []
     skipped = []
     errors = []
 
-    for result in results:
-        if isinstance(result, Exception):
-            errors.append({'error': str(result)})
-        elif result[0] == 'indexed':
-            indexed.append(result[1])
-        elif result[0] == 'skipped':
-            skipped.append(result[1])
-        elif result[0] == 'error':
-            errors.append(result[1])
+    for item in items:
+        item_data = item.get('data', {})
+        item_key = item_data.get('key')
+        citation_key = get_citation_key_from_extra(item_data.get('extra', ''))
+        title = item_data.get('title', 'Untitled')
+
+        try:
+            # Check if already indexed
+            if not force_reindex and paper_exists(item_key):
+                skipped.append({'item_key': item_key, 'citation_key': citation_key, 'reason': 'Already indexed'})
+                continue
+
+            # Find PDF
+            pdf_path = _find_pdf(item_data, project_path, citation_key)
+            if not pdf_path:
+                skipped.append({'item_key': item_key, 'citation_key': citation_key, 'reason': 'No PDF found'})
+                continue
+
+            # Delete existing if reindexing
+            if force_reindex and paper_exists(item_key):
+                delete_paper(item_key)
+
+            # Extract, chunk, embed, save
+            text, page_breaks = extract_pdf_text_with_pages(pdf_path)
+            if not text.strip():
+                skipped.append({'item_key': item_key, 'citation_key': citation_key, 'reason': 'No extractable text'})
+                continue
+
+            chunks = chunk_text(text, page_breaks=page_breaks)
+            if not chunks:
+                skipped.append({'item_key': item_key, 'citation_key': citation_key, 'reason': 'No chunks generated'})
+                continue
+
+            chunk_texts = [c['text'] for c in chunks]
+            embeddings = embed_texts(chunk_texts)
+
+            # Save to database
+            authors = format_authors(item_data.get('creators', []))
+            year = _extract_year(item_data.get('date', ''))
+
+            insert_paper(
+                item_key=item_key,
+                citation_key=citation_key,
+                title=title,
+                authors=authors,
+                year=year,
+                project=project,
+                pdf_path=str(pdf_path),
+                total_chunks=len(chunks),
+            )
+            insert_chunks_batch(item_key=item_key, chunks=chunks, embeddings=embeddings)
+
+            indexed.append({
+                'item_key': item_key,
+                'citation_key': citation_key,
+                'title': title,
+                'chunks': len(chunks),
+            })
+
+        except Exception as e:
+            errors.append({
+                'item_key': item_key,
+                'citation_key': citation_key,
+                'error': str(e),
+            })
 
     return {'indexed': indexed, 'skipped': skipped, 'errors': errors}
 
 
-async def _index_single_paper_tracked(
-    item_data: dict,
-    project_path: Path,
-    project: str,
-    force_reindex: bool,
-    tracker: ProgressTracker,
-) -> dict:
-    """Index a single paper with progress tracking and async wrappers for blocking calls."""
-    item_key = item_data.get('key')
-    citation_key = get_citation_key_from_extra(item_data.get('extra', ''))
-    title = item_data.get('title', 'Untitled')
-
-    # Check if already indexed
-    if not force_reindex and await asyncio.to_thread(paper_exists, item_key):
-        return {'status': 'skipped', 'reason': 'Already indexed'}
-
-    # Find PDF file
-    pdf_path = None
+def _find_pdf(item_data: dict, project_path: Path, citation_key: Optional[str]) -> Optional[Path]:
+    """Find PDF file for a paper."""
+    # Try citation key from Extra field
     if citation_key:
         candidate = project_path / f"{citation_key}.pdf"
         if candidate.exists():
-            pdf_path = candidate
+            return candidate
 
-    # If no citation key in Extra, try to generate one from metadata
-    if not pdf_path:
-        authors = format_authors(item_data.get('creators', []))
-        year = item_data.get('date', '')[:4] if item_data.get('date') else ''
-        if title and authors and year:
-            generated_key = generate_citation_key(title, authors, year)
-            candidate = project_path / f"{generated_key}.pdf"
-            if candidate.exists():
-                citation_key = generated_key
-                pdf_path = candidate
-
-    if not pdf_path:
-        return {'status': 'skipped', 'reason': 'No PDF found'}
-
-    # Stage: Extracting
-    await tracker.update_task(item_key, stage=TaskStage.EXTRACTING)
-
-    try:
-        # Wrap blocking pdfplumber call
-        full_text, page_breaks = await asyncio.to_thread(
-            extract_pdf_text_with_pages, pdf_path
-        )
-    except Exception as e:
-        return {'status': 'skipped', 'reason': f'PDF extraction failed: {e}'}
-
-    if not full_text.strip():
-        return {'status': 'skipped', 'reason': 'PDF has no extractable text'}
-
-    # Stage: Chunking
-    await tracker.update_task(item_key, stage=TaskStage.CHUNKING)
-
-    chunks = await asyncio.to_thread(
-        chunk_text, full_text, page_breaks=page_breaks
-    )
-
-    if not chunks:
-        return {'status': 'skipped', 'reason': 'No chunks generated'}
-
-    await tracker.update_task(item_key, chunks_total=len(chunks))
-
-    # Stage: Embedding
-    await tracker.update_task(item_key, stage=TaskStage.EMBEDDING)
-
-    chunk_texts = [c['text'] for c in chunks]
-    # Wrap blocking OpenAI call
-    embeddings = await asyncio.to_thread(embed_texts, chunk_texts)
-
-    # Stage: Saving
-    await tracker.update_task(item_key, stage=TaskStage.SAVING)
-
-    # Delete existing data if reindexing
-    if force_reindex:
-        await asyncio.to_thread(delete_paper, item_key)
-
-    # Insert paper metadata
+    # Try generating citation key from metadata
+    title = item_data.get('title', '')
     authors = format_authors(item_data.get('creators', []))
-    year = None
-    date_str = item_data.get('date', '')
-    if date_str and len(date_str) >= 4:
-        try:
-            year = int(date_str[:4])
-        except ValueError:
-            pass
+    year = item_data.get('date', '')[:4] if item_data.get('date') else ''
 
-    await asyncio.to_thread(
-        insert_paper,
-        item_key=item_key,
-        citation_key=citation_key,
-        title=title,
-        authors=authors,
-        year=year,
-        project=project,
-        pdf_path=str(pdf_path),
-        total_chunks=len(chunks),
-    )
-
-    # Batch insert all chunks with embeddings (single DB call)
-    await asyncio.to_thread(
-        insert_chunks_batch,
-        item_key=item_key,
-        chunks=chunks,
-        embeddings=embeddings,
-    )
-
-    return {'status': 'indexed', 'chunks': len(chunks)}
-
-
-async def _index_single_paper(
-    item_data: dict,
-    project_path: Path,
-    project: str,
-    force_reindex: bool,
-) -> dict:
-    """Index a single paper."""
-    item_key = item_data.get('key')
-    citation_key = get_citation_key_from_extra(item_data.get('extra', ''))
-    title = item_data.get('title', 'Untitled')
-
-    # Check if already indexed
-    if not force_reindex and paper_exists(item_key):
-        return {'status': 'skipped', 'reason': 'Already indexed'}
-
-    # Find PDF file
-    pdf_path = None
-    if citation_key:
-        candidate = project_path / f"{citation_key}.pdf"
+    if title and authors and year:
+        generated_key = generate_citation_key(title, authors, year)
+        candidate = project_path / f"{generated_key}.pdf"
         if candidate.exists():
-            pdf_path = candidate
+            return candidate
 
-    # If no citation key in Extra, try to generate one from metadata
-    if not pdf_path:
-        authors = format_authors(item_data.get('creators', []))
-        year = item_data.get('date', '')[:4] if item_data.get('date') else ''
-        if title and authors and year:
-            generated_key = generate_citation_key(title, authors, year)
-            candidate = project_path / f"{generated_key}.pdf"
-            if candidate.exists():
-                citation_key = generated_key
-                pdf_path = candidate
+    return None
 
-    if not pdf_path:
-        return {'status': 'skipped', 'reason': 'No PDF found'}
 
-    # Extract text with page breaks
-    try:
-        full_text, page_breaks = extract_pdf_text_with_pages(pdf_path)
-    except Exception as e:
-        return {'status': 'skipped', 'reason': f'PDF extraction failed: {e}'}
-
-    if not full_text.strip():
-        return {'status': 'skipped', 'reason': 'PDF has no extractable text'}
-
-    # Chunk the text
-    chunks = chunk_text(full_text, page_breaks=page_breaks)
-
-    if not chunks:
-        return {'status': 'skipped', 'reason': 'No chunks generated'}
-
-    # Generate embeddings (batch for efficiency)
-    chunk_texts = [c['text'] for c in chunks]
-    embeddings = embed_texts(chunk_texts)
-
-    # Delete existing data if reindexing
-    if force_reindex:
-        delete_paper(item_key)
-
-    # Insert paper metadata
-    authors = format_authors(item_data.get('creators', []))
-    year = None
-    date_str = item_data.get('date', '')
+def _extract_year(date_str: str) -> Optional[int]:
+    """Extract year from date string."""
     if date_str and len(date_str) >= 4:
         try:
-            year = int(date_str[:4])
+            return int(date_str[:4])
         except ValueError:
             pass
-
-    insert_paper(
-        item_key=item_key,
-        citation_key=citation_key,
-        title=title,
-        authors=authors,
-        year=year,
-        project=project,
-        pdf_path=str(pdf_path),
-        total_chunks=len(chunks),
-    )
-
-    # Insert chunks with embeddings
-    for chunk, embedding in zip(chunks, embeddings):
-        insert_chunk(
-            item_key=item_key,
-            chunk_index=chunk['chunk_index'],
-            page_number=chunk['page_number'],
-            text=chunk['text'],
-            embedding=embedding,
-        )
-
-    return {'status': 'indexed', 'chunks': len(chunks)}
+    return None
 
 
 async def search_papers(
@@ -723,3 +522,216 @@ async def rag_status(project: Optional[str] = None) -> dict[str, Any]:
                 'message': str(e)
             }
         }
+
+
+async def generate_index_script(
+    project: str,
+    force_reindex: bool = False,
+) -> dict[str, Any]:
+    """
+    Generate a standalone Python script for indexing papers.
+
+    Creates a script at Literature/{PROJECT}/index_papers.py that can be run
+    directly without MCP timeout constraints. Recommended for large collections.
+
+    Args:
+        project: Project code (e.g., 'MI-IC')
+        force_reindex: If True, script will reindex all papers
+
+    Returns:
+        {success, filepath, instructions}
+    """
+    try:
+        config = config_manager.load()
+
+        if project not in config.projects:
+            return {
+                'success': False,
+                'error': {'code': 'PROJECT_NOT_FOUND', 'message': f"Project '{project}' not found"}
+            }
+
+        proj_config = config.projects[project]
+        if not proj_config.zotero_collection_key:
+            return {
+                'success': False,
+                'error': {'code': 'COLLECTION_NOT_CONFIGURED', 'message': 'No Zotero collection configured'}
+            }
+
+        # Generate script content
+        script_content = _generate_script_content(project, proj_config.zotero_collection_key, force_reindex)
+
+        # Write to project folder
+        lit_path = config_manager.literature_path
+        script_path = lit_path / project / "index_papers.py"
+        script_path.write_text(script_content, encoding='utf-8')
+
+        return {
+            'success': True,
+            'filepath': str(script_path),
+            'instructions': [
+                f'cd "{lit_path / project}"',
+                'python index_papers.py',
+            ],
+            'message': f'Script generated at {script_path}. Run it directly to index papers.',
+        }
+    except Exception as e:
+        return {'success': False, 'error': {'code': 'SCRIPT_ERROR', 'message': str(e)}}
+
+
+def _generate_script_content(project: str, collection_key: str, force_reindex: bool) -> str:
+    """Generate the standalone indexing script content."""
+    return f'''#!/usr/bin/env python3
+"""
+Standalone indexing script for project: {project}
+Generated by litrev-mcp
+
+Run: python index_papers.py
+"""
+
+import os
+import sys
+from pathlib import Path
+
+def main():
+    # Ensure environment variables are set
+    required_vars = ['ZOTERO_API_KEY', 'ZOTERO_USER_ID', 'OPENAI_API_KEY']
+    missing = [v for v in required_vars if not os.environ.get(v)]
+    if missing:
+        print(f"ERROR: Missing environment variables: {{', '.join(missing)}}")
+        print("Set these as system environment variables before running.")
+        sys.exit(1)
+
+    # Import litrev modules
+    try:
+        from litrev_mcp.config import config_manager
+        from litrev_mcp.tools.zotero import get_zotero_client, get_citation_key_from_extra, format_authors
+        from litrev_mcp.tools.rag_db import get_connection, paper_exists, delete_paper, insert_paper, insert_chunks_batch
+        from litrev_mcp.tools.rag_embed import extract_pdf_text_with_pages, chunk_text, embed_texts
+        from litrev_mcp.tools.pdf_utils import generate_citation_key
+    except ImportError as e:
+        print(f"ERROR: Could not import litrev_mcp: {{e}}")
+        print("Make sure litrev-mcp is installed: pip install litrev-mcp")
+        sys.exit(1)
+
+    project = "{project}"
+    collection_key = "{collection_key}"
+    force_reindex = {force_reindex}
+
+    print(f"Indexing project: {{project}}")
+    print(f"Force reindex: {{force_reindex}}")
+    print()
+
+    # Load config and get paths
+    config = config_manager.load()
+    project_path = config_manager.literature_path / project
+
+    print(f"Project path: {{project_path}}")
+
+    # Connect to Zotero
+    print("Connecting to Zotero...")
+    zot = get_zotero_client()
+    items = zot.collection_items(collection_key, itemType='-attachment')
+    print(f"Found {{len(items)}} items in Zotero collection")
+
+    # Connect to database
+    print("Connecting to database...")
+    get_connection()
+
+    # Process papers
+    print()
+    indexed = 0
+    skipped = 0
+    errors = 0
+
+    for i, item in enumerate(items):
+        item_data = item.get('data', {{}})
+        item_key = item_data.get('key')
+        citation_key = get_citation_key_from_extra(item_data.get('extra', ''))
+        title = item_data.get('title', 'Untitled')[:50]
+
+        print(f"[{{i+1}}/{{len(items)}}] {{citation_key or item_key}}: {{title}}...")
+
+        # Check if already indexed
+        if not force_reindex and paper_exists(item_key):
+            print("  SKIP: Already indexed")
+            skipped += 1
+            continue
+
+        # Delete existing if reindexing
+        if force_reindex and paper_exists(item_key):
+            delete_paper(item_key)
+
+        # Find PDF
+        pdf_path = None
+        if citation_key:
+            candidate = project_path / f"{{citation_key}}.pdf"
+            if candidate.exists():
+                pdf_path = candidate
+
+        if not pdf_path:
+            # Try generating key from metadata
+            authors = format_authors(item_data.get('creators', []))
+            year = item_data.get('date', '')[:4] if item_data.get('date') else ''
+            if item_data.get('title') and authors and year:
+                gen_key = generate_citation_key(item_data['title'], authors, year)
+                candidate = project_path / f"{{gen_key}}.pdf"
+                if candidate.exists():
+                    citation_key = gen_key
+                    pdf_path = candidate
+
+        if not pdf_path:
+            print("  SKIP: No PDF found")
+            skipped += 1
+            continue
+
+        try:
+            # Extract text
+            text, page_breaks = extract_pdf_text_with_pages(pdf_path)
+            if not text.strip():
+                print("  SKIP: No extractable text")
+                skipped += 1
+                continue
+
+            # Chunk and embed
+            chunks = chunk_text(text, page_breaks=page_breaks)
+            print(f"  {{len(chunks)}} chunks, embedding...")
+
+            chunk_texts = [c['text'] for c in chunks]
+            embeddings = embed_texts(chunk_texts)
+
+            # Save to database
+            authors = format_authors(item_data.get('creators', []))
+            year = None
+            if item_data.get('date') and len(item_data['date']) >= 4:
+                try:
+                    year = int(item_data['date'][:4])
+                except ValueError:
+                    pass
+
+            insert_paper(
+                item_key=item_key,
+                citation_key=citation_key,
+                title=item_data.get('title', 'Untitled'),
+                authors=authors,
+                year=year,
+                project=project,
+                pdf_path=str(pdf_path),
+                total_chunks=len(chunks),
+            )
+            insert_chunks_batch(item_key=item_key, chunks=chunks, embeddings=embeddings)
+
+            print("  OK")
+            indexed += 1
+
+        except Exception as e:
+            print(f"  ERROR: {{e}}")
+            errors += 1
+
+    print()
+    print("=" * 50)
+    print(f"Done! Indexed: {{indexed}}, Skipped: {{skipped}}, Errors: {{errors}}")
+
+
+if __name__ == "__main__":
+    main()
+'''
