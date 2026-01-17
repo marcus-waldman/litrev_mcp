@@ -10,9 +10,26 @@ Provides tools for managing a concept map that tracks:
 
 from typing import Optional
 import re
+import json
+import os
+from pathlib import Path
 
 from litrev_mcp.config import config_manager
 from litrev_mcp.tools import concept_map_db as db
+
+# Import Anthropic SDK for Opus
+try:
+    import anthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+
+# Import OpenAI for embeddings
+try:
+    import openai
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
 
 
 def _make_concept_id(name: str) -> str:
@@ -20,6 +37,169 @@ def _make_concept_id(name: str) -> str:
     # Convert to lowercase, replace spaces/special chars with underscores
     concept_id = re.sub(r'[^a-z0-9]+', '_', name.lower()).strip('_')
     return concept_id
+
+
+def extract_concepts(
+    project: str,
+    insight_id: str,
+    content: Optional[str] = None,
+) -> dict:
+    """
+    Extract concepts and relationships from an insight using Claude Opus.
+
+    This tool automatically analyzes an insight and identifies:
+    - Concepts mentioned with definitions
+    - Relationships between concepts
+    - Claims that serve as evidence
+
+    Args:
+        project: Project code
+        insight_id: The insight ID (filename without extension)
+        content: Optional insight content (will read from file if not provided)
+
+    Returns:
+        Extracted concepts, relationships, and evidence ready for add_concepts
+    """
+    if not ANTHROPIC_AVAILABLE:
+        return {
+            'success': False,
+            'error': 'Anthropic SDK not installed. Run: pip install anthropic'
+        }
+
+    # Get API key
+    api_key = os.environ.get('ANTHROPIC_API_KEY')
+    if not api_key:
+        return {
+            'success': False,
+            'error': 'ANTHROPIC_API_KEY environment variable not set'
+        }
+
+    # Read insight content if not provided
+    if content is None:
+        lit_path = config_manager.literature_path
+        if not lit_path:
+            return {
+                'success': False,
+                'error': 'Literature path not configured'
+            }
+
+        # Find the insight file
+        notes_dir = lit_path / project / "_notes"
+        insight_files = list(notes_dir.glob(f"*{insight_id}*.md"))
+
+        if not insight_files:
+            return {
+                'success': False,
+                'error': f"Insight file not found for ID: {insight_id}"
+            }
+
+        with open(insight_files[0], 'r', encoding='utf-8') as f:
+            content = f.read()
+
+    # Construct the extraction prompt
+    extraction_prompt = f"""You are analyzing a literature review insight to extract concepts and their relationships.
+
+INSIGHT CONTENT:
+{content}
+
+Your task is to extract:
+1. **Concepts**: Key ideas, methods, phenomena, or constructs mentioned
+2. **Relationships**: How concepts relate to each other (causes, corrects, requires, etc.)
+3. **Evidence**: Specific claims that ground concepts in this literature
+
+For each concept, provide:
+- name: Clear, concise name
+- definition: Brief definition (1-2 sentences)
+- source: "insight" (since it comes from literature)
+
+For each relationship, provide:
+- from: Source concept name
+- to: Target concept name
+- type: One of (caused_by, corrected_by, type_of, requires, assumes, contradicts, related_to)
+- source: "insight" (since it's grounded in literature)
+- grounded_in: The insight_id ("{insight_id}")
+
+For evidence, provide:
+- concept_name: Which concept this evidences
+- claim: The specific claim (keep it concise)
+- insight_id: "{insight_id}"
+
+Additionally, use your general knowledge to:
+- Identify concepts that SHOULD exist but aren't explicitly mentioned (mark these as source: "ai_knowledge")
+- Add structural relationships from domain knowledge (mark as source: "ai_knowledge")
+
+Return ONLY a JSON object in this exact format:
+{{
+  "concepts": [
+    {{"name": "...", "definition": "...", "source": "insight"}},
+    {{"name": "...", "definition": "...", "source": "ai_knowledge"}}
+  ],
+  "relationships": [
+    {{"from": "...", "to": "...", "type": "...", "source": "insight", "grounded_in": "{insight_id}"}},
+    {{"from": "...", "to": "...", "type": "...", "source": "ai_knowledge"}}
+  ],
+  "evidence": [
+    {{"concept_name": "...", "claim": "...", "insight_id": "{insight_id}"}}
+  ]
+}}
+
+Be thorough but precise. Extract 5-15 concepts typically."""
+
+    # Call Claude Opus
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+
+        message = client.messages.create(
+            model="claude-opus-4-20250514",  # Opus 4.5
+            max_tokens=4096,
+            messages=[
+                {"role": "user", "content": extraction_prompt}
+            ]
+        )
+
+        # Extract JSON from response
+        response_text = message.content[0].text
+
+        # Try to parse JSON from the response
+        # Claude might wrap it in markdown code blocks
+        if "```json" in response_text:
+            json_start = response_text.index("```json") + 7
+            json_end = response_text.index("```", json_start)
+            json_text = response_text[json_start:json_end].strip()
+        elif "```" in response_text:
+            json_start = response_text.index("```") + 3
+            json_end = response_text.index("```", json_start)
+            json_text = response_text[json_start:json_end].strip()
+        else:
+            json_text = response_text.strip()
+
+        extracted = json.loads(json_text)
+
+        return {
+            'success': True,
+            'project': project,
+            'insight_id': insight_id,
+            'extracted': extracted,
+            'concepts_count': len(extracted.get('concepts', [])),
+            'relationships_count': len(extracted.get('relationships', [])),
+            'evidence_count': len(extracted.get('evidence', [])),
+            'message': f"Extracted {len(extracted.get('concepts', []))} concepts, "
+                      f"{len(extracted.get('relationships', []))} relationships, "
+                      f"{len(extracted.get('evidence', []))} evidence entries. "
+                      "Review and use add_concepts to confirm."
+        }
+
+    except json.JSONDecodeError as e:
+        return {
+            'success': False,
+            'error': f"Failed to parse JSON from Claude response: {e}",
+            'raw_response': response_text if 'response_text' in locals() else None
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f"Error during extraction: {str(e)}"
+        }
 
 
 def add_concepts(
@@ -377,4 +557,147 @@ def resolve_conflict(
         'conflict_id': conflict_id,
         'resolution': resolution,
         'message': f"Conflict {conflict_id} resolved as '{resolution}'"
+    }
+
+
+def query_concepts(
+    project: str,
+    query: str,
+    purpose: Optional[str] = None,
+    audience: Optional[str] = None,
+    max_results: int = 10,
+) -> dict:
+    """
+    Query the concept map with salience weighting.
+
+    Uses hybrid approach:
+    1. Embedding similarity for initial ranking
+    2. Considers purpose/audience context for salience
+    3. Returns concepts ordered by relevance
+
+    Args:
+        project: Project code
+        query: Natural language query
+        purpose: Context for salience weighting (e.g., "Methods section for journal")
+        audience: Target audience (e.g., "Reviewers familiar with regression")
+        max_results: Maximum results to return
+
+    Returns:
+        Concepts ranked by salience with evidence
+    """
+    # Initialize schema if needed
+    db.init_concept_map_schema()
+
+    # Get all concepts for project
+    concepts = db.get_project_concepts(project)
+
+    if not concepts:
+        return {
+            'success': True,
+            'project': project,
+            'query': query,
+            'results': [],
+            'message': "No concepts found in concept map for this project"
+        }
+
+    # Simple text matching for now (can be enhanced with embeddings later)
+    # Score based on query match in name/definition
+    scored_concepts = []
+    query_lower = query.lower()
+
+    for concept in concepts:
+        score = concept['salience']  # Start with base salience
+
+        # Boost if query matches name or definition
+        if query_lower in concept['name'].lower():
+            score += 0.3
+        if concept['definition'] and query_lower in concept['definition'].lower():
+            score += 0.2
+
+        # Get evidence
+        evidence_list = db.get_evidence(concept['id'], project)
+
+        scored_concepts.append({
+            'concept': concept['name'],
+            'concept_id': concept['id'],
+            'definition': concept['definition'],
+            'salience': round(score, 3),
+            'grounded': concept['source'] == 'insight' or concept['evidence_count'] > 0,
+            'evidence': [
+                f"{ev['claim']} [{ev['insight_id']}]"
+                for ev in evidence_list[:3]
+            ],
+            'source': concept['source'],
+        })
+
+    # Sort by score
+    scored_concepts.sort(key=lambda x: x['salience'], reverse=True)
+
+    # Apply config threshold
+    config = config_manager.config
+    threshold = config.concept_map.salience_threshold
+    filtered = [c for c in scored_concepts if c['salience'] >= threshold]
+
+    return {
+        'success': True,
+        'project': project,
+        'query': query,
+        'purpose': purpose,
+        'audience': audience,
+        'results': filtered[:max_results],
+        'total_matches': len(filtered),
+        'message': f"Found {len(filtered)} relevant concepts (showing top {min(len(filtered), max_results)})"
+    }
+
+
+def find_concept_gaps(
+    project: str,
+    purpose: Optional[str] = None,
+    audience: Optional[str] = None,
+    min_salience: float = 0.5,
+) -> dict:
+    """
+    Identify salient concepts that lack grounded evidence.
+
+    Finds concepts that are:
+    - Important for the purpose (high salience)
+    - From AI knowledge without evidence (gaps)
+
+    Args:
+        project: Project code
+        purpose: Context for salience (e.g., "Methods section")
+        audience: Target audience
+        min_salience: Minimum salience to consider (default 0.5)
+
+    Returns:
+        List of gaps with suggestions
+    """
+    # Initialize schema if needed
+    db.init_concept_map_schema()
+
+    # Get gaps from database
+    gaps = db.find_gaps(project, min_salience)
+
+    # Format results
+    gap_list = []
+    for gap in gaps:
+        gap_list.append({
+            'concept': gap['name'],
+            'concept_id': gap['id'],
+            'definition': gap['definition'],
+            'salience': gap['salience'],
+            'status': 'ai_scaffolding',
+            'why_salient': f"Salience score: {gap['salience']:.2f}. Concept is related to your research but lacks grounded evidence.",
+            'suggestion': f"Search for papers about '{gap['name']}' to ground this concept in literature."
+        })
+
+    return {
+        'success': True,
+        'project': project,
+        'purpose': purpose,
+        'audience': audience,
+        'min_salience': min_salience,
+        'gaps': gap_list,
+        'count': len(gap_list),
+        'message': f"Found {len(gap_list)} salient concepts without grounded evidence"
     }

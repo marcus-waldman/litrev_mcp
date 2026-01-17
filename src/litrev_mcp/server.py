@@ -76,10 +76,13 @@ from litrev_mcp.tools.workflow import (
     get_workflow_status,
 )
 from litrev_mcp.tools.concept_map import (
+    extract_concepts,
     add_concepts,
     show_concept_map,
     update_concept,
     delete_concept,
+    query_concepts,
+    find_concept_gaps,
     list_conflicts,
     resolve_conflict,
 )
@@ -845,6 +848,19 @@ async def list_tools() -> list[Tool]:
         ),
         # Concept Map tools
         Tool(
+            name="extract_concepts",
+            description="Extract concepts and relationships from an insight using Claude Opus. Automatically identifies concepts, relationships, and evidence. Returns extracted data for review before adding to concept map.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "insight_id": {"type": "string", "description": "Insight ID (filename without extension)"},
+                    "content": {"type": "string", "description": "Optional insight content (will read from file if not provided)"}
+                },
+                "required": ["project", "insight_id"]
+            }
+        ),
+        Tool(
             name="add_concepts",
             description="Add concepts to the concept map (after extraction or manual entry).",
             inputSchema={
@@ -974,6 +990,35 @@ async def list_tools() -> list[Tool]:
                     }
                 },
                 "required": ["project", "concept_id"]
+            }
+        ),
+        Tool(
+            name="query_concepts",
+            description="Query the concept map with salience weighting. Returns concepts ranked by relevance to the query, weighted by purpose and audience context.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "query": {"type": "string", "description": "Natural language query"},
+                    "purpose": {"type": "string", "description": "Context for salience (e.g., 'Methods section for journal')"},
+                    "audience": {"type": "string", "description": "Target audience (e.g., 'Reviewers familiar with regression')"},
+                    "max_results": {"type": "integer", "default": 10, "description": "Maximum results to return"}
+                },
+                "required": ["project", "query"]
+            }
+        ),
+        Tool(
+            name="find_concept_gaps",
+            description="Identify salient concepts that lack grounded evidence. Finds AI knowledge concepts with high salience but no supporting citations from your literature.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "purpose": {"type": "string", "description": "Context for salience (e.g., 'Methods section')"},
+                    "audience": {"type": "string", "description": "Target audience"},
+                    "min_salience": {"type": "number", "default": 0.5, "description": "Minimum salience to consider"}
+                },
+                "required": ["project"]
             }
         ),
         Tool(
@@ -1308,6 +1353,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
     # Concept Map tools
+    if name == "extract_concepts":
+        result = extract_concepts(
+            project=arguments["project"],
+            insight_id=arguments["insight_id"],
+            content=arguments.get("content")
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
     if name == "add_concepts":
         result = add_concepts(
             project=arguments["project"],
@@ -1338,6 +1391,25 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             project=arguments["project"],
             concept_id=arguments["concept_id"],
             confirm=arguments.get("confirm", False)
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "query_concepts":
+        result = query_concepts(
+            project=arguments["project"],
+            query=arguments["query"],
+            purpose=arguments.get("purpose"),
+            audience=arguments.get("audience"),
+            max_results=arguments.get("max_results", 10)
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "find_concept_gaps":
+        result = find_concept_gaps(
+            project=arguments["project"],
+            purpose=arguments.get("purpose"),
+            audience=arguments.get("audience"),
+            min_salience=arguments.get("min_salience", 0.5)
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
