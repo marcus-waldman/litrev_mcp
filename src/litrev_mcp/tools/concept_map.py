@@ -31,6 +31,13 @@ try:
 except ImportError:
     OPENAI_AVAILABLE = False
 
+# Import PyVis for visualization
+try:
+    from pyvis.network import Network
+    PYVIS_AVAILABLE = True
+except ImportError:
+    PYVIS_AVAILABLE = False
+
 
 def _make_concept_id(name: str) -> str:
     """Generate a concept ID from the concept name."""
@@ -700,4 +707,185 @@ def find_concept_gaps(
         'gaps': gap_list,
         'count': len(gap_list),
         'message': f"Found {len(gap_list)} salient concepts without grounded evidence"
+    }
+
+
+def visualize_concept_map(
+    project: str,
+    output_path: Optional[str] = None,
+    filter_source: Optional[str] = None,
+    highlight_gaps: bool = True,
+    show_salience: bool = True,
+) -> dict:
+    """
+    Generate interactive PyVis graph visualization of the concept map.
+
+    Creates an HTML file with interactive graph showing:
+    - Nodes = concepts (color by source, size by salience)
+    - Edges = relationships (labeled with type)
+    - Tooltips with definitions and evidence
+
+    Colors:
+    - Green: Grounded (from insights with evidence)
+    - Yellow/Amber: AI scaffolding (AI knowledge with some evidence)
+    - Red: Gaps (AI knowledge without evidence)
+
+    Args:
+        project: Project code
+        output_path: Optional custom output path (default: project/_concept_map.html)
+        filter_source: Optional filter ('insight', 'ai_knowledge', or None for all)
+        highlight_gaps: Whether to highlight gaps in red
+        show_salience: Whether to size nodes by salience
+
+    Returns:
+        Success status and output path
+    """
+    if not PYVIS_AVAILABLE:
+        return {
+            'success': False,
+            'error': 'PyVis not installed. Run: pip install pyvis'
+        }
+
+    # Initialize schema if needed
+    db.init_concept_map_schema()
+
+    # Get concepts and relationships
+    concepts = db.get_project_concepts(project, filter_source=filter_source)
+
+    if not concepts:
+        return {
+            'success': False,
+            'error': f"No concepts found for project {project}"
+        }
+
+    # Create network
+    net = Network(
+        height="750px",
+        width="100%",
+        bgcolor="#ffffff",
+        font_color="black",
+        directed=True
+    )
+
+    # Enable physics for layout
+    net.barnes_hut()
+
+    # Color scheme
+    colors = {
+        'grounded': '#4CAF50',      # Green - has evidence
+        'ai_scaffolding': '#FFC107',  # Yellow/amber - AI with some evidence
+        'gap': '#F44336',            # Red - AI without evidence
+    }
+
+    # Add nodes
+    for concept in concepts:
+        # Determine color
+        if concept['source'] == 'insight':
+            color = colors['grounded']
+            status = 'grounded'
+        elif concept['evidence_count'] > 0:
+            color = colors['ai_scaffolding']
+            status = 'ai_scaffolding'
+        else:
+            color = colors['gap'] if highlight_gaps else colors['ai_scaffolding']
+            status = 'gap'
+
+        # Size by salience
+        if show_salience:
+            size = int(concept['salience'] * 30 + 10)
+        else:
+            size = 20
+
+        # Build tooltip
+        tooltip_lines = []
+        tooltip_lines.append(f"<b>{concept['name']}</b>")
+        tooltip_lines.append(f"<br>Status: {status}")
+        tooltip_lines.append(f"<br>Salience: {concept['salience']:.2f}")
+
+        if concept['definition']:
+            tooltip_lines.append(f"<br><br>{concept['definition'][:200]}...")
+
+        if concept['evidence_count'] > 0:
+            evidence_list = db.get_evidence(concept['id'], project)
+            tooltip_lines.append(f"<br><br><b>Evidence ({concept['evidence_count']}):</b>")
+            for ev in evidence_list[:3]:
+                tooltip_lines.append(f"<br>• {ev['claim'][:100]}... [{ev['insight_id']}]")
+
+        tooltip = "".join(tooltip_lines)
+
+        # Add node
+        net.add_node(
+            concept['id'],
+            label=concept['name'],
+            title=tooltip,
+            color=color,
+            size=size
+        )
+
+    # Get all relationships for concepts in this project
+    all_relationships = db.get_relationships()
+
+    # Filter to relationships where both concepts are in this project
+    concept_ids = {c['id'] for c in concepts}
+    project_relationships = [
+        r for r in all_relationships
+        if r['from_concept_id'] in concept_ids and r['to_concept_id'] in concept_ids
+    ]
+
+    # Add edges
+    for rel in project_relationships:
+        # Edge tooltip
+        tooltip = f"{rel['relationship_type']}"
+        if rel['grounded_in']:
+            tooltip += f" (grounded in {rel['grounded_in']})"
+
+        # Edge color based on source
+        edge_color = '#4CAF50' if rel['source'] == 'insight' else '#9E9E9E'
+
+        net.add_edge(
+            rel['from_concept_id'],
+            rel['to_concept_id'],
+            title=tooltip,
+            label=rel['relationship_type'],
+            color=edge_color
+        )
+
+    # Set physics options
+    net.set_options("""
+    {
+        "physics": {
+            "barnesHut": {
+                "gravitationalConstant": -8000,
+                "springLength": 150,
+                "springConstant": 0.04
+            },
+            "minVelocity": 0.75
+        }
+    }
+    """)
+
+    # Determine output path
+    if output_path is None:
+        lit_path = config_manager.literature_path
+        if not lit_path:
+            return {
+                'success': False,
+                'error': 'Literature path not configured'
+            }
+        output_path = str(lit_path / project / "_concept_map.html")
+
+    # Save the graph
+    net.save_graph(output_path)
+
+    # Get stats
+    stats = db.get_concept_map_stats(project)
+
+    return {
+        'success': True,
+        'project': project,
+        'output_path': output_path,
+        'stats': stats,
+        'message': f"Interactive concept map saved to {output_path}. "
+                  f"Open in browser to explore {stats['total_concepts']} concepts "
+                  f"and {stats['relationships']} relationships."
     }

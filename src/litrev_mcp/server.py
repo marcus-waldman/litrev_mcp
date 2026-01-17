@@ -83,6 +83,7 @@ from litrev_mcp.tools.concept_map import (
     delete_concept,
     query_concepts,
     find_concept_gaps,
+    visualize_concept_map,
     list_conflicts,
     resolve_conflict,
 )
@@ -1022,6 +1023,25 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
+            name="visualize_concept_map",
+            description="Generate interactive PyVis graph visualization. Creates HTML file with color-coded nodes (green=grounded, yellow=scaffolding, red=gaps), sized by salience, with tooltips showing definitions and evidence.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "output_path": {"type": "string", "description": "Optional custom output path (default: project/_concept_map.html)"},
+                    "filter_source": {
+                        "type": "string",
+                        "enum": ["all", "insight", "ai_knowledge"],
+                        "description": "Filter by concept source"
+                    },
+                    "highlight_gaps": {"type": "boolean", "default": True, "description": "Highlight gaps in red"},
+                    "show_salience": {"type": "boolean", "default": True, "description": "Size nodes by salience"}
+                },
+                "required": ["project"]
+            }
+        ),
+        Tool(
             name="list_conflicts",
             description="List conflicts between AI knowledge and grounded evidence.",
             inputSchema={
@@ -1410,6 +1430,16 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             purpose=arguments.get("purpose"),
             audience=arguments.get("audience"),
             min_salience=arguments.get("min_salience", 0.5)
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "visualize_concept_map":
+        result = visualize_concept_map(
+            project=arguments["project"],
+            output_path=arguments.get("output_path"),
+            filter_source=arguments.get("filter_source"),
+            highlight_gaps=arguments.get("highlight_gaps", True),
+            show_salience=arguments.get("show_salience", True)
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
