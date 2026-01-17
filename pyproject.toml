@@ -1,7 +1,7 @@
 [project]
 name = "litrev-mcp"
-version = "0.1.0"
-description = "MCP server for AI-assisted literature review with Zotero, PubMed, and Semantic Scholar integration"
+version = "0.4.0"
+description = "MCP server for AI-assisted literature review with Zotero, PubMed, Semantic Scholar, and concept map for purpose-driven organization"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"

@@ -8,15 +8,16 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 
 ## Status
 
-✅ **v0.3.0 - Guided Workflow & Best Practices**
+✅ **v0.4.0 - Concept Map for Purpose-Driven Organization**
 
-- 37 tools across 9 categories
+- 46 tools across 10 categories
 - Full Zotero integration
 - Search APIs (PubMed, Semantic Scholar, ERIC)
 - Knowledge base system
 - Semantic search over your PDFs (DuckDB + OpenAI embeddings)
+- **NEW: Concept Map for Purpose-Driven Organization** - AI-powered concept extraction, salience-weighted querying, gap detection, and interactive visualization
 - Project context for tailored responses (goal, audience, style)
-- **NEW: Claude-powered synthesis with coverage assessment** - `ask_papers` now provides reasoned answers that honestly assess literature coverage and suggest follow-up searches when gaps exist
+- Claude-powered synthesis with coverage assessment
 - Project dashboard
 - Setup wizard
 
@@ -78,6 +79,46 @@ Use `/init-litrev-context PROJECT` skill for collaborative context setup.
 
 **NEW in v0.3.0**: Automatic workflow templates (`_workflow.md`, `_synthesis_notes.md`, `_gaps.md`, `_pivots.md`, `_searches.md`) created for new projects. Proactive guidance built into all tool outputs to follow best practices. See `todo/litrev_mcp_best_practices.md` for the structured workflow approach.
 
+### Concept Map (10 tools)
+
+**NEW in v0.4.0**: Organize knowledge by purpose-driven relevance, not just keyword search.
+
+The concept map creates a living knowledge graph from your literature, distinguishing between:
+- **Grounded concepts** (extracted from your papers with evidence)
+- **AI scaffolding** (structural knowledge from Claude's general knowledge)
+- **Gaps** (salient concepts without literature support)
+
+#### Core Tools:
+- `extract_concepts` - **AI extraction with Claude Opus** - Automatically extracts concepts, relationships, and evidence from saved insights. Uses Opus 4.5 for nuanced understanding of domain concepts.
+- `add_concepts` - Add concepts, relationships, and evidence to the map (after extraction or manual entry)
+- `show_concept_map` - View concept map structure with statistics and details
+
+#### Discovery & Querying:
+- `query_concepts` - **Salience-weighted search** - Find concepts relevant to your query, ranked by importance to your purpose (e.g., "Methods section for epi journal")
+- `find_concept_gaps` - **Gap detection** - Identify salient AI knowledge concepts that lack grounded evidence, with suggestions for literature searches
+
+#### Visualization:
+- `visualize_concept_map` - **Interactive PyVis graph** - Generate HTML visualization with:
+  - Color coding: Green (grounded), Yellow (AI scaffolding), Red (gaps)
+  - Node size by salience weight
+  - Rich tooltips with definitions and evidence
+  - Directed edges labeled with relationship types
+
+#### Editing & Conflict Resolution:
+- `update_concept` - Modify concept definitions, salience, relationships, or evidence
+- `delete_concept` - Remove concepts from project (preserves global concept library)
+- `list_conflicts` - View contradictions between AI scaffolding and grounded evidence
+- `resolve_conflict` - Resolve flagged conflicts (ai_correct, evidence_correct, both_valid)
+
+**Three-Layer Architecture:**
+1. **Concept Map** (grounded in your literature)
+2. **Salience Map** (weighted by purpose/audience - computed at query time)
+3. **AI General Knowledge** (structural scaffolding to identify gaps)
+
+**Database**: 6 tables in `literature.duckdb` (concepts, aliases, project_concepts, relationships, evidence, conflicts)
+
+**Epistemic Tagging**: Every concept and relationship marked as either `insight` (from literature) or `ai_knowledge` (from Claude's general knowledge, could be wrong).
+
 ### Test Tool (1 tool)
 - `litrev_hello` - Verify litrev-mcp is working
 
@@ -98,6 +139,12 @@ Before installing litrev-mcp, ensure you have:
 - **OpenAI API Key** ([Get one](https://platform.openai.com/api-keys))
   - Used for `index_papers`, `search_papers`, `ask_papers`
   - Costs: ~$0.10-0.50 per paper indexed, ~$0.001 per search
+
+### Required for Concept Map Extraction
+
+- **Anthropic API Key** ([Get one](https://console.anthropic.com/settings/keys))
+  - Used for `extract_concepts` (Claude Opus 4.5)
+  - Costs: ~$0.03-0.10 per insight extraction
 
 ### Optional (Improves Performance)
 
@@ -219,7 +266,8 @@ If you're using Git Bash, you can also set them in `~/.bashrc`:
 ```bash
 export ZOTERO_API_KEY="your-api-key-here"
 export ZOTERO_USER_ID="your-numeric-id"
-export OPENAI_API_KEY="your-openai-key"
+export OPENAI_API_KEY="your-openai-key"  # if using RAG
+export ANTHROPIC_API_KEY="your-anthropic-key"  # if using concept map
 ```
 Then close and reopen your terminal.
 
@@ -233,7 +281,8 @@ Add to your shell config file (`~/.zshrc` for newer macOS, `~/.bash_profile` for
 ```bash
 export ZOTERO_API_KEY="your-api-key-here"
 export ZOTERO_USER_ID="your-numeric-id"
-export OPENAI_API_KEY="your-openai-key"
+export OPENAI_API_KEY="your-openai-key"  # if using RAG
+export ANTHROPIC_API_KEY="your-anthropic-key"  # if using concept map
 ```
 
 Then:
@@ -256,7 +305,8 @@ Add to your shell config file (`~/.bashrc` or `~/.zshrc`):
 ```bash
 export ZOTERO_API_KEY="your-api-key-here"
 export ZOTERO_USER_ID="your-numeric-id"
-export OPENAI_API_KEY="your-openai-key"
+export OPENAI_API_KEY="your-openai-key"  # if using RAG
+export ANTHROPIC_API_KEY="your-anthropic-key"  # if using concept map
 ```
 
 Then:
