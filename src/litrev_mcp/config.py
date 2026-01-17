@@ -48,6 +48,14 @@ class RAGConfig(BaseModel):
     )
 
 
+class WorkflowConfig(BaseModel):
+    """Configuration for workflow guidance and best practices."""
+    enabled: bool = True
+    show_guidance: bool = True
+    phase_tracking: bool = True
+    auto_generate_templates: bool = True
+
+
 class Config(BaseModel):
     """Main configuration model."""
     projects: dict[str, ProjectConfig] = Field(default_factory=dict)
@@ -55,6 +63,7 @@ class Config(BaseModel):
     notebooklm_pattern: str = "{project_code} - {type} - {descriptor}"
     better_bibtex: BetterBibTexConfig = Field(default_factory=BetterBibTexConfig)
     rag: RAGConfig = Field(default_factory=RAGConfig)
+    workflow: WorkflowConfig = Field(default_factory=WorkflowConfig)
 
 
 class ConfigManager:

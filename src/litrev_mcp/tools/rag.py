@@ -115,12 +115,26 @@ async def index_papers(
         total_chunks = sum(p['chunks'] for p in results['indexed'])
         summary = f"Indexed {len(results['indexed'])} papers ({total_chunks} chunks), skipped {len(results['skipped'])}, errors {len(results['errors'])}"
 
-        return {
+        result = {
             'success': True,
             'project': project,
             **results,
             'summary': summary,
         }
+
+        # Add workflow guidance
+        if config.workflow.show_guidance:
+            result['guidance'] = {
+                'next_steps': [
+                    f'{len(results["indexed"])} papers indexed - ready for semantic search',
+                    'Use ask_papers to answer questions from your literature',
+                    'Review _gaps.md to see which questions you can now answer',
+                    'Document findings with save_insight as you discover them'
+                ],
+                'best_practice': 'Use ask_papers for synthesis, not just keyword search'
+            }
+
+        return result
 
     except EmbeddingError as e:
         return {
@@ -470,13 +484,29 @@ Write in a natural, reasoning tone. Avoid formulaic language - reason authentica
             for r in results
         ]
 
-        return {
+        result = {
             'success': True,
             'question': question,
             'context': ''.join(context_parts),
             'coverage': coverage,
             'sources': sources,
         }
+
+        # Add workflow guidance
+        from litrev_mcp.config import config_manager
+        config = config_manager.load()
+        if config.workflow.show_guidance:
+            result['guidance'] = {
+                'next_steps': [
+                    'Save this synthesis with save_insight if valuable',
+                    'Update _synthesis_notes.md with how this connects to manuscript',
+                    'If this answers a gap, update _gaps.md',
+                    'If this changes understanding, document with save_pivot'
+                ],
+                'best_practice': 'Link RAG findings to manuscript sections for easy retrieval'
+            }
+
+        return result
 
     except Exception as e:
         return {

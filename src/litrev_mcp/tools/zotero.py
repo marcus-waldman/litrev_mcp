@@ -373,6 +373,20 @@ async def zotero_add_paper(
             }
             if fetch_warning:
                 result['warning'] = fetch_warning
+
+            # Add workflow guidance
+            if config.workflow.show_guidance:
+                drive_filename = f"{citation_key}.pdf" if citation_key else "paper.pdf"
+                result['guidance'] = {
+                    'next_steps': [
+                        'Acquire PDF and attach to Zotero item',
+                        f'Save PDF copy as {drive_filename} in Literature/{project}/',
+                        'If this closes a gap, update _gaps.md with save_gap',
+                        'If this shifts understanding, log with save_pivot'
+                    ],
+                    'best_practice': 'Document why this paper matters in _synthesis_notes.md'
+                }
+
             return result
         else:
             failed = resp.get('failed', {})
@@ -557,13 +571,27 @@ async def zotero_update_status(
         item_data['tags'] = new_tags
         zot.update_item(item_data)
 
-        return {
+        result = {
             'success': True,
             'item_key': item_data.get('key'),
             'title': item_data.get('title'),
             'old_status': old_status,
             'new_status': new_status,
         }
+
+        # Add workflow guidance for completed papers
+        if new_status == 'complete' and config.workflow.show_guidance:
+            result['guidance'] = {
+                'next_steps': [
+                    'Extract key insights to _synthesis_notes.md',
+                    'Use save_insight to capture specific findings',
+                    'Update any relevant gaps in _gaps.md',
+                    'If this changed understanding, document with save_pivot'
+                ],
+                'best_practice': 'Connect findings to manuscript sections in _synthesis_notes.md'
+            }
+
+        return result
 
     except ZoteroAuthError as e:
         return {'success': False, 'error': {'code': 'ZOTERO_AUTH_FAILED', 'message': str(e)}}

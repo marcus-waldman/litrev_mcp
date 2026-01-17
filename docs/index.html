@@ -498,9 +498,9 @@ source ~/.bashrc  # or ~/.zshrc</code></pre>
             <!-- Tool Reference -->
             <section id="tools">
                 <h2>🛠️ Tool Reference</h2>
-                <p>All 29 MCP tools organized by category:</p>
+                <p>All 36 MCP tools organized by category:</p>
 
-                <h3>Zotero Integration (9 tools)</h3>
+                <h3>Zotero Integration (10 tools)</h3>
                 <table class="tool-table">
                     <thead>
                         <tr>
@@ -685,7 +685,7 @@ source ~/.bashrc  # or ~/.zshrc</code></pre>
                     </tbody>
                 </table>
 
-                <h3>Setup Wizard (2 tools)</h3>
+                <h3>Setup Wizard (3 tools)</h3>
                 <table class="tool-table">
                     <thead>
                         <tr>
@@ -704,6 +704,11 @@ source ~/.bashrc  # or ~/.zshrc</code></pre>
                             <td><code>setup_create_project</code></td>
                             <td>Create new project with directory structure</td>
                             <td><code>code</code>, <code>name</code>, <code>zotero_collection_key</code> (optional)</td>
+                        </tr>
+                        <tr>
+                            <td><code>gdrive_reauthenticate</code></td>
+                            <td>Force re-authentication with Google Drive (use when tokens expire)</td>
+                            <td>None</td>
                         </tr>
                     </tbody>
                 </table>
@@ -731,6 +736,55 @@ source ~/.bashrc  # or ~/.zshrc</code></pre>
                     </tbody>
                 </table>
                 <p><strong>Tip:</strong> Use <code>/init-litrev-context PROJECT</code> for collaborative context setup.</p>
+
+                <h3>Workflow Tools (5 tools)</h3>
+                <table class="tool-table">
+                    <thead>
+                        <tr>
+                            <th>Tool</th>
+                            <th>What it does</th>
+                            <th>Key Parameters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>save_gap</code></td>
+                            <td>Document a research gap - what you're searching for but haven't found yet. Tracks why it matters and search strategies tried.</td>
+                            <td><code>project</code>, <code>topic</code>, <code>why_matters</code>, <code>search_strategy</code>, <code>status</code> (searched/partially_found/not_found)</td>
+                        </tr>
+                        <tr>
+                            <td><code>save_session_log</code></td>
+                            <td>Log end-of-session summary with accomplishments, pivots, questions, and next steps. Creates audit trail for resuming work.</td>
+                            <td><code>project</code>, <code>status</code>, <code>completed</code> (list), <code>pivots</code> (list, optional), <code>questions</code> (list, optional), <code>next_steps</code> (list, optional)</td>
+                        </tr>
+                        <tr>
+                            <td><code>save_pivot</code></td>
+                            <td>Document a conceptual pivot - when your understanding shifts significantly. Tracks what changed, why, and impact on citation strategy.</td>
+                            <td><code>project</code>, <code>topic</code>, <code>before</code>, <code>after</code>, <code>rationale</code>, <code>source</code> (optional), <code>impact</code> (optional)</td>
+                        </tr>
+                        <tr>
+                            <td><code>save_search_strategy</code></td>
+                            <td>Record search strategy for reproducibility. Documents queries, databases, results, and conclusions for audit trail.</td>
+                            <td><code>project</code>, <code>goal</code>, <code>queries</code> (list of dicts), <code>conclusion</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>get_workflow_status</code></td>
+                            <td>Get workflow metrics for a project. Returns counts of gaps, pivots, searches, last session date, and current phase.</td>
+                            <td><code>project</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div class="info-box">
+                    <p><strong>NEW in v0.3.0:</strong> Automatic workflow templates created for new projects:</p>
+                    <ul>
+                        <li><code>_workflow.md</code> - Phase-based progress tracking</li>
+                        <li><code>_synthesis_notes.md</code> - Narrative synthesis skeleton</li>
+                        <li><code>_gaps.md</code> - Gap documentation</li>
+                        <li><code>_pivots.md</code> - Conceptual shift tracking</li>
+                        <li><code>_searches.md</code> - Search reproducibility audit trail</li>
+                    </ul>
+                    <p>All tool outputs now include proactive guidance for next steps and best practices. See <code>todo/litrev_mcp_best_practices.md</code> for the complete structured workflow approach.</p>
+                </div>
 
                 <h3>Test Tool (1 tool)</h3>
                 <table class="tool-table">

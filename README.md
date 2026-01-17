@@ -8,9 +8,9 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 
 ## Status
 
-✅ **v0.2.2 - Intelligent Literature Synthesis**
+✅ **v0.3.0 - Guided Workflow & Best Practices**
 
-- 31 tools across 8 categories
+- 37 tools across 9 categories
 - Full Zotero integration
 - Search APIs (PubMed, Semantic Scholar, ERIC)
 - Knowledge base system
@@ -58,15 +58,25 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 - `project_status` - Get comprehensive project dashboard
 - `pending_actions` - Get all pending user actions (PDFs to acquire, papers for NotebookLM)
 
-### Setup Wizard (2 tools)
+### Setup Wizard (3 tools)
 - `setup_check` - Verify configuration (Google Drive, Zotero credentials)
 - `setup_create_project` - Create new project with directory structure
+- `gdrive_reauthenticate` - Force re-authentication with Google Drive (use when tokens expire)
 
 ### Project Context (2 tools)
 - `get_project_context` - Get project context (goal, audience, style) from _context.md
 - `update_project_context` - Create or update project context file
 
 Use `/init-litrev-context PROJECT` skill for collaborative context setup.
+
+### Workflow Tools (5 tools)
+- `save_gap` - Document research gaps (what you're searching for)
+- `save_session_log` - Log end-of-session summaries for audit trail
+- `save_pivot` - Track conceptual shifts and understanding changes
+- `save_search_strategy` - Record search strategies for reproducibility
+- `get_workflow_status` - View workflow metrics (gaps, pivots, searches, phases)
+
+**NEW in v0.3.0**: Automatic workflow templates (`_workflow.md`, `_synthesis_notes.md`, `_gaps.md`, `_pivots.md`, `_searches.md`) created for new projects. Proactive guidance built into all tool outputs to follow best practices. See `todo/litrev_mcp_best_practices.md` for the structured workflow approach.
 
 ### Test Tool (1 tool)
 - `litrev_hello` - Verify litrev-mcp is working

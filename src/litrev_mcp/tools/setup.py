@@ -93,6 +93,34 @@ async def setup_check() -> dict[str, Any]:
                     'fix': 'Use setup_create_project to create a project',
                 })
 
+        # Check Google Drive credentials (if PyDrive2 installed)
+        try:
+            from litrev_mcp.tools.gdrive import verify_drive_access, get_credentials_path
+
+            creds_path = get_credentials_path()
+            if creds_path:
+                # Credentials file exists, verify they work
+                verify_result = verify_drive_access()
+                if not verify_result.get('success'):
+                    issues.append({
+                        'severity': 'error',
+                        'component': 'Google Drive OAuth',
+                        'message': f"Google Drive credentials invalid: {verify_result.get('error', 'Unknown error')}",
+                        'fix': verify_result.get('suggestion', 'Run gdrive_reauthenticate to refresh credentials'),
+                    })
+                    all_good = False
+        except ImportError:
+            # PyDrive2 not installed, skip Drive check
+            pass
+        except Exception as e:
+            issues.append({
+                'severity': 'warning',
+                'component': 'Google Drive OAuth',
+                'message': f'Could not verify Google Drive credentials: {str(e)}',
+                'fix': 'Run gdrive_reauthenticate if you encounter Drive errors',
+            })
+            warnings.append('Could not verify Google Drive credentials')
+
         # Check Zotero credentials
         zotero_key = get_zotero_api_key()
         zotero_user = get_zotero_user_id()
@@ -216,6 +244,35 @@ async def setup_create_project(
                 }
             }
 
+        # Generate workflow templates if enabled
+        templates_created = []
+        if config.workflow.auto_generate_templates:
+            from litrev_mcp.templates import (
+                WORKFLOW_TEMPLATE,
+                SYNTHESIS_NOTES_TEMPLATE,
+                GAPS_TEMPLATE,
+                PIVOTS_TEMPLATE,
+                SEARCHES_TEMPLATE
+            )
+
+            template_files = {
+                '_workflow.md': WORKFLOW_TEMPLATE,
+                '_synthesis_notes.md': SYNTHESIS_NOTES_TEMPLATE,
+                '_gaps.md': GAPS_TEMPLATE,
+                '_pivots.md': PIVOTS_TEMPLATE,
+                '_searches.md': SEARCHES_TEMPLATE
+            }
+
+            for filename, template in template_files.items():
+                filepath = project_dir / filename
+                if not filepath.exists():  # Don't overwrite if already exists
+                    try:
+                        filepath.write_text(template, encoding='utf-8')
+                        templates_created.append(filename)
+                    except Exception as e:
+                        # Log warning but don't fail project creation
+                        pass
+
         # Add project to config
         new_project = ProjectConfig(
             name=name,
@@ -246,6 +303,11 @@ async def setup_create_project(
             next_steps.append("Add the collection key to config using zotero_list_projects to find the key")
 
         next_steps.append("Start adding papers with zotero_add_paper or search tools")
+
+        if templates_created:
+            next_steps.append("Review _workflow.md to understand the phase structure")
+            next_steps.append("Document initial gaps in _gaps.md")
+
         next_steps.append("Create NotebookLM notebooks in Google Drive")
 
         return {
@@ -256,6 +318,7 @@ async def setup_create_project(
                 'path': str(project_dir),
                 'notes_path': str(notes_dir),
             },
+            'templates_created': templates_created,
             'message': f"Project '{code}' created successfully",
             'next_steps': next_steps,
         }

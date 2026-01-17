@@ -11,6 +11,7 @@ from litrev_mcp.config import config_manager
 from litrev_mcp.tools.zotero import get_zotero_client, get_status_from_tags, item_to_dict
 from litrev_mcp.tools.insights import get_notes_path
 from litrev_mcp.tools.context import get_context_text
+from litrev_mcp.tools.workflow import get_workflow_status
 
 
 async def project_status(
@@ -144,7 +145,14 @@ async def project_status(
         # Get NotebookLM notebooks from config
         notebooklm_notebooks = proj_config.notebooklm_notebooks if hasattr(proj_config, 'notebooklm_notebooks') else []
 
-        return {
+        # Get workflow status if enabled
+        workflow_metrics = None
+        if config.workflow.phase_tracking:
+            workflow_result = await get_workflow_status(project)
+            if workflow_result['success']:
+                workflow_metrics = workflow_result['workflow']
+
+        result = {
             'success': True,
             'project': project,
             'name': proj_config.name,
@@ -155,7 +163,43 @@ async def project_status(
             'recent_insights': recent_insights,
             'drive_folder': drive_folder,
             'notebooklm_notebooks': notebooklm_notebooks,
+            'workflow': workflow_metrics,
         }
+
+        # Add proactive guidance
+        if config.workflow.show_guidance:
+            guidance_items = []
+
+            # Suggest based on paper counts
+            if summary['needs_pdf'] > 0:
+                guidance_items.append(f"📄 {summary['needs_pdf']} papers need PDFs - acquire and update status")
+
+            if summary['needs_notebooklm'] > 0:
+                guidance_items.append(f"📝 {summary['needs_notebooklm']} papers ready for NotebookLM analysis")
+
+            # Suggest based on workflow state
+            if workflow_metrics:
+                if workflow_metrics['gaps']['total'] == 0:
+                    guidance_items.append("💡 Consider documenting research gaps in _gaps.md")
+
+                open_gaps = workflow_metrics['gaps']['by_status'].get('not_found', 0)
+                if open_gaps > 0:
+                    guidance_items.append(f"🔍 {open_gaps} open gaps to address - review _gaps.md")
+
+                if workflow_metrics['last_session']:
+                    try:
+                        last_session = datetime.strptime(workflow_metrics['last_session'], '%Y-%m-%d')
+                        if datetime.now() - last_session > timedelta(days=7):
+                            guidance_items.append("⏰ Over a week since last session - review _workflow.md to resume")
+                    except (ValueError, TypeError):
+                        pass
+
+            result['guidance'] = {
+                'current_status': workflow_metrics['current_phase'] if workflow_metrics else None,
+                'recommendations': guidance_items
+            }
+
+        return result
 
     except Exception as e:
         return {

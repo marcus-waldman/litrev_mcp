@@ -143,13 +143,29 @@ async def pubmed_search(
                 "abstract": abstract,
             })
 
-        return {
+        result = {
             "success": True,
             "source": "PubMed",
             "query": query,
             "count": len(papers),
             "results": papers,
         }
+
+        # Add workflow guidance
+        from litrev_mcp.config import config_manager
+        config = config_manager.load()
+        if config.workflow.show_guidance:
+            result['guidance'] = {
+                'next_steps': [
+                    f'Review {len(papers)} papers and add relevant ones with zotero_add_paper',
+                    'Document this search strategy with save_search_strategy',
+                    'If results close gaps, update _gaps.md',
+                    'If no relevant results found, document as failed search (still valuable!)'
+                ],
+                'best_practice': 'Record search query, database, and results for reproducibility'
+            }
+
+        return result
 
     except Exception as e:
         return {

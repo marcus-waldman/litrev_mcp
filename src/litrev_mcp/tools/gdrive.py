@@ -38,12 +38,15 @@ def get_token_path() -> Path:
     return token_dir / "token.json"
 
 
-def authenticate() -> GoogleDrive:
+def authenticate(force_reauth: bool = False) -> GoogleDrive:
     """
     Authenticate with Google Drive.
 
     Uses credentials.json from .litrev folder.
     Stores tokens in ~/.litrev-mcp/token.json (machine-specific).
+
+    Args:
+        force_reauth: If True, force re-authentication even if token exists
 
     Returns:
         Authenticated GoogleDrive instance
@@ -54,7 +57,7 @@ def authenticate() -> GoogleDrive:
     """
     global _drive, _gauth
 
-    if _drive is not None:
+    if _drive is not None and not force_reauth:
         return _drive
 
     creds_path = get_credentials_path()
@@ -78,16 +81,30 @@ def authenticate() -> GoogleDrive:
 
     _gauth = GoogleAuth(settings=settings)
 
+    # Force reauth: delete old token and start fresh
+    if force_reauth and token_path.exists():
+        token_path.unlink()
+
     # Try to load saved credentials
-    if token_path.exists():
+    if token_path.exists() and not force_reauth:
         _gauth.LoadCredentialsFile(str(token_path))
 
     if _gauth.credentials is None:
         # No saved credentials - need to authenticate
         _gauth.LocalWebserverAuth()
     elif _gauth.access_token_expired:
-        # Refresh expired token
-        _gauth.Refresh()
+        # Try to refresh expired token
+        try:
+            _gauth.Refresh()
+        except Exception as e:
+            # Refresh failed (likely token revoked or expired)
+            # Delete the bad token and force re-authentication
+            if token_path.exists():
+                token_path.unlink()
+
+            # Reset and re-authenticate
+            _gauth = GoogleAuth(settings=settings)
+            _gauth.LocalWebserverAuth()
     else:
         # Valid credentials loaded
         _gauth.Authorize()
@@ -221,6 +238,85 @@ def get_drive_link_for_pdf(filename: str, project_code: str) -> Optional[str]:
 
     # Get shareable link
     return get_shareable_link(file_info['id'])
+
+
+def verify_drive_access() -> dict[str, Any]:
+    """
+    Verify that Google Drive authentication is working.
+
+    Attempts to list files in the root directory as a simple test.
+
+    Returns:
+        Dictionary with success status and details
+    """
+    try:
+        drive = authenticate()
+
+        # Try a simple API call to verify credentials work
+        drive.ListFile({'q': "'root' in parents", 'maxResults': 1}).GetList()
+
+        return {
+            'success': True,
+            'message': 'Google Drive credentials are valid and working',
+        }
+    except Exception as e:
+        error_msg = str(e)
+        return {
+            'success': False,
+            'error': error_msg,
+            'suggestion': (
+                'Run gdrive_reauthenticate to refresh your credentials'
+                if 'invalid_grant' in error_msg.lower() or 'expired' in error_msg.lower()
+                else 'Check that credentials.json is valid'
+            ),
+        }
+
+
+async def gdrive_reauthenticate() -> dict[str, Any]:
+    """
+    Force re-authentication with Google Drive.
+
+    Deletes existing OAuth tokens and prompts for fresh authentication.
+    Use this when you get token expiration or invalid_grant errors.
+
+    Returns:
+        Dictionary with re-authentication result
+    """
+    global _drive, _gauth
+
+    try:
+        # Clear global instances
+        _drive = None
+        _gauth = None
+
+        # Force re-authentication
+        drive = authenticate(force_reauth=True)
+
+        # Verify it works
+        drive.ListFile({'q': "'root' in parents", 'maxResults': 1}).GetList()
+
+        return {
+            'success': True,
+            'message': 'Successfully re-authenticated with Google Drive',
+            'token_path': str(get_token_path()),
+        }
+
+    except FileNotFoundError as e:
+        return {
+            'success': False,
+            'error': {
+                'code': 'CREDENTIALS_NOT_FOUND',
+                'message': str(e),
+            }
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': {
+                'code': 'REAUTH_FAILED',
+                'message': str(e),
+            }
+        }
 
 
 async def add_link_attachment_to_zotero(

@@ -72,13 +72,29 @@ async def semantic_scholar_search(
         for paper in results:
             papers.append(format_s2_paper(paper))
 
-        return {
+        result = {
             "success": True,
             "source": "Semantic Scholar",
             "query": query,
             "count": len(papers),
             "results": papers,
         }
+
+        # Add workflow guidance
+        from litrev_mcp.config import config_manager
+        config = config_manager.load()
+        if config.workflow.show_guidance:
+            result['guidance'] = {
+                'next_steps': [
+                    f'Review {len(papers)} papers and add relevant ones with zotero_add_paper',
+                    'Document this search strategy with save_search_strategy',
+                    'If results close gaps, update _gaps.md',
+                    'If no relevant results found, document as failed search (still valuable!)'
+                ],
+                'best_practice': 'Record search query, database, and results for reproducibility'
+            }
+
+        return result
 
     except Exception as e:
         return {
@@ -171,13 +187,29 @@ async def semantic_scholar_references(
                         "is_influential": is_influential,
                     })
 
-        return {
+        result = {
             "success": True,
             "source": "Semantic Scholar",
             "source_paper": source_paper,
             "reference_count": len(paper.references) if paper.references else 0,
             "references": references,
         }
+
+        # Add workflow guidance
+        from litrev_mcp.config import config_manager
+        config = config_manager.load()
+        if config.workflow.show_guidance:
+            result['guidance'] = {
+                'next_steps': [
+                    f'Review {len(references)} references and add relevant ones with zotero_add_paper',
+                    'Backward snowball helps find foundational work',
+                    'Document this search strategy with save_search_strategy',
+                    'If results close gaps, update _gaps.md'
+                ],
+                'best_practice': 'Cite highly-cited references as foundational work'
+            }
+
+        return result
 
     except Exception as e:
         return {
@@ -270,13 +302,29 @@ async def semantic_scholar_citations(
                         "is_influential": is_influential,
                     })
 
-        return {
+        result = {
             "success": True,
             "source": "Semantic Scholar",
             "source_paper": source_paper,
             "citation_count": len(paper.citations) if paper.citations else 0,
             "citations": citations,
         }
+
+        # Add workflow guidance
+        from litrev_mcp.config import config_manager
+        config = config_manager.load()
+        if config.workflow.show_guidance:
+            result['guidance'] = {
+                'next_steps': [
+                    f'Review {len(citations)} citations and add relevant ones with zotero_add_paper',
+                    'Forward snowball helps find recent applications',
+                    'Document this search strategy with save_search_strategy',
+                    'If results close gaps, update _gaps.md'
+                ],
+                'best_practice': 'Recent citations show current state of the field'
+            }
+
+        return result
 
     except Exception as e:
         return {

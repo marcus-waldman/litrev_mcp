@@ -50,6 +50,13 @@ from litrev_mcp.tools.setup import (
     setup_create_project,
 )
 from litrev_mcp.tools.pdf import process_pdf_inbox, migrate_zotero_attachments
+
+# Import gdrive_reauthenticate only if PyDrive2 is available
+try:
+    from litrev_mcp.tools.gdrive import gdrive_reauthenticate
+    GDRIVE_AVAILABLE = True
+except ImportError:
+    GDRIVE_AVAILABLE = False
 from litrev_mcp.tools.rag import (
     index_papers,
     search_papers,
@@ -60,6 +67,13 @@ from litrev_mcp.tools.rag import (
 from litrev_mcp.tools.context import (
     get_project_context,
     update_project_context,
+)
+from litrev_mcp.tools.workflow import (
+    save_gap,
+    save_session_log,
+    save_pivot,
+    save_search_strategy,
+    get_workflow_status,
 )
 
 # Configure logging
@@ -528,6 +542,15 @@ async def list_tools() -> list[Tool]:
                 "required": ["code", "name"],
             },
         ),
+        Tool(
+            name="gdrive_reauthenticate",
+            description="Force re-authentication with Google Drive. Deletes existing OAuth tokens and prompts for fresh authentication. Use this when you get token expiration or invalid_grant errors.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
         # PDF Processing tools
         Tool(
             name="process_pdf_inbox",
@@ -705,6 +728,113 @@ async def list_tools() -> list[Tool]:
                 "required": ["project", "content"],
             },
         ),
+        # Workflow tools
+        Tool(
+            name="save_gap",
+            description="Document a gap - something you're searching for but haven't found yet. Tracks what you're looking for, why it matters, and search strategies tried.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code (e.g., 'ME-BLOOD')"},
+                    "topic": {"type": "string", "description": "Concise description of the gap"},
+                    "why_matters": {"type": "string", "description": "Why this gap is important to your manuscript"},
+                    "search_strategy": {"type": "string", "description": "Search queries or approaches you've tried"},
+                    "status": {
+                        "type": "string",
+                        "enum": ["searched", "partially_found", "not_found"],
+                        "description": "Current status of the gap (default: searched)"
+                    }
+                },
+                "required": ["project", "topic", "why_matters", "search_strategy"]
+            }
+        ),
+        Tool(
+            name="save_session_log",
+            description="Log an end-of-session summary with accomplishments, pivots, questions, and next steps. Creates audit trail for resuming work.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "status": {"type": "string", "description": "Overall status (e.g., 'Phase 2 in progress')"},
+                    "completed": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of accomplishments this session"
+                    },
+                    "pivots": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of conceptual shifts documented (optional)"
+                    },
+                    "questions": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Active questions needing answers (optional)"
+                    },
+                    "next_steps": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Next actions to take (optional)"
+                    },
+                    "blocked": {"type": "string", "description": "What's blocking progress (optional)"}
+                },
+                "required": ["project", "status", "completed"]
+            }
+        ),
+        Tool(
+            name="save_pivot",
+            description="Document a conceptual pivot - when your understanding shifts significantly. Tracks what changed, why, and impact on citation strategy.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "topic": {"type": "string", "description": "Concise description of the pivot"},
+                    "before": {"type": "string", "description": "What you thought before"},
+                    "after": {"type": "string", "description": "What you learned"},
+                    "rationale": {"type": "string", "description": "Why this matters"},
+                    "source": {"type": "string", "description": "Citation or insight that caused shift (optional)"},
+                    "impact": {"type": "string", "description": "How this changes the manuscript (optional)"}
+                },
+                "required": ["project", "topic", "before", "after", "rationale"]
+            }
+        ),
+        Tool(
+            name="save_search_strategy",
+            description="Record search strategy for reproducibility. Documents queries, databases, results, and conclusions for audit trail.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "goal": {"type": "string", "description": "What gap you're trying to fill"},
+                    "queries": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "query": {"type": "string"},
+                                "database": {"type": "string"},
+                                "result": {"type": "string"}
+                            },
+                            "required": ["query", "result"]
+                        },
+                        "description": "List of queries with results"
+                    },
+                    "conclusion": {"type": "string", "description": "What you found or confirmed not finding"}
+                },
+                "required": ["project", "goal", "queries", "conclusion"]
+            }
+        ),
+        Tool(
+            name="get_workflow_status",
+            description="Get workflow metrics for a project. Returns counts of gaps, pivots, searches, last session date, and current phase.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"}
+                },
+                "required": ["project"]
+            }
+        ),
     ]
 
 
@@ -875,6 +1005,19 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
+    if name == "gdrive_reauthenticate":
+        if GDRIVE_AVAILABLE:
+            result = await gdrive_reauthenticate()
+            return [TextContent(type="text", text=json.dumps(result, indent=2))]
+        else:
+            return [TextContent(type="text", text=json.dumps({
+                "success": False,
+                "error": {
+                    "code": "PYDRIVE_NOT_INSTALLED",
+                    "message": "PyDrive2 is not installed. Run: pip install PyDrive2"
+                }
+            }, indent=2))]
+
     # PDF Processing tools
     if name == "process_pdf_inbox":
         result = await process_pdf_inbox(
@@ -939,6 +1082,54 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             project=arguments.get("project"),
             content=arguments.get("content"),
         )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    # Workflow tools
+    if name == "save_gap":
+        result = await save_gap(
+            project=arguments["project"],
+            topic=arguments["topic"],
+            why_matters=arguments["why_matters"],
+            search_strategy=arguments["search_strategy"],
+            status=arguments.get("status", "searched")
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "save_session_log":
+        result = await save_session_log(
+            project=arguments["project"],
+            status=arguments["status"],
+            completed=arguments["completed"],
+            pivots=arguments.get("pivots"),
+            questions=arguments.get("questions"),
+            next_steps=arguments.get("next_steps"),
+            blocked=arguments.get("blocked")
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "save_pivot":
+        result = await save_pivot(
+            project=arguments["project"],
+            topic=arguments["topic"],
+            before=arguments["before"],
+            after=arguments["after"],
+            rationale=arguments["rationale"],
+            source=arguments.get("source"),
+            impact=arguments.get("impact")
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "save_search_strategy":
+        result = await save_search_strategy(
+            project=arguments["project"],
+            goal=arguments["goal"],
+            queries=arguments["queries"],
+            conclusion=arguments["conclusion"]
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "get_workflow_status":
+        result = await get_workflow_status(project=arguments["project"])
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
     return [TextContent(type="text", text=f"Unknown tool: {name}")]

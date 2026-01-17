@@ -252,6 +252,18 @@ async def save_insight(
             zotero_result = await _add_references_to_zotero(content, project, config)
             result['zotero_import'] = zotero_result
 
+        # Add workflow guidance
+        if config.workflow.show_guidance:
+            result['guidance'] = {
+                'next_steps': [
+                    'Update _synthesis_notes.md with this finding',
+                    'Check if this closes any gaps in _gaps.md',
+                    'Consider: Does this change your understanding? Log with save_pivot if so',
+                    'Link this insight to specific manuscript sections'
+                ],
+                'best_practice': 'Connect insights to manuscript sections in _synthesis_notes.md'
+            }
+
         return result
 
     except Exception as e:
