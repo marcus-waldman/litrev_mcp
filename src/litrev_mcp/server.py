@@ -75,6 +75,14 @@ from litrev_mcp.tools.workflow import (
     save_search_strategy,
     get_workflow_status,
 )
+from litrev_mcp.tools.concept_map import (
+    add_concepts,
+    show_concept_map,
+    update_concept,
+    delete_concept,
+    list_conflicts,
+    resolve_conflict,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -835,6 +843,173 @@ async def list_tools() -> list[Tool]:
                 "required": ["project"]
             }
         ),
+        # Concept Map tools
+        Tool(
+            name="add_concepts",
+            description="Add concepts to the concept map (after extraction or manual entry).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "concepts": {
+                        "type": "array",
+                        "description": "List of concepts to add",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "definition": {"type": "string"},
+                                "source": {"type": "string", "enum": ["insight", "ai_knowledge"]},
+                                "salience_weight": {"type": "number", "default": 0.5},
+                                "aliases": {"type": "array", "items": {"type": "string"}}
+                            },
+                            "required": ["name", "source"]
+                        }
+                    },
+                    "relationships": {
+                        "type": "array",
+                        "description": "List of relationships between concepts",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "from": {"type": "string"},
+                                "to": {"type": "string"},
+                                "type": {"type": "string"},
+                                "source": {"type": "string", "enum": ["insight", "ai_knowledge"]},
+                                "grounded_in": {"type": "string"}
+                            },
+                            "required": ["from", "to", "type", "source"]
+                        }
+                    },
+                    "evidence": {
+                        "type": "array",
+                        "description": "List of evidence linking concepts to insights",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "concept_name": {"type": "string"},
+                                "claim": {"type": "string"},
+                                "insight_id": {"type": "string"},
+                                "pages": {"type": "string"}
+                            },
+                            "required": ["concept_name", "claim", "insight_id"]
+                        }
+                    }
+                },
+                "required": ["project", "concepts"]
+            }
+        ),
+        Tool(
+            name="show_concept_map",
+            description="Display the concept map for a project with statistics and concept details.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "format": {
+                        "type": "string",
+                        "enum": ["summary", "detailed"],
+                        "default": "summary",
+                        "description": "Output format"
+                    },
+                    "filter_source": {
+                        "type": "string",
+                        "enum": ["all", "insight", "ai_knowledge"],
+                        "description": "Filter by concept source"
+                    }
+                },
+                "required": ["project"]
+            }
+        ),
+        Tool(
+            name="update_concept",
+            description="Update a concept's definition, salience, aliases, relationships, or evidence.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "concept_id": {"type": "string", "description": "Concept ID to update"},
+                    "updates": {
+                        "type": "object",
+                        "description": "Updates to apply",
+                        "properties": {
+                            "definition": {"type": "string"},
+                            "salience_weight": {"type": "number"},
+                            "add_alias": {"type": "string"},
+                            "add_relationship": {
+                                "type": "object",
+                                "properties": {
+                                    "target": {"type": "string"},
+                                    "type": {"type": "string"},
+                                    "source": {"type": "string"},
+                                    "grounded_in": {"type": "string"}
+                                }
+                            },
+                            "add_evidence": {
+                                "type": "object",
+                                "properties": {
+                                    "claim": {"type": "string"},
+                                    "insight_id": {"type": "string"},
+                                    "pages": {"type": "string"}
+                                }
+                            }
+                        }
+                    }
+                },
+                "required": ["project", "concept_id", "updates"]
+            }
+        ),
+        Tool(
+            name="delete_concept",
+            description="Remove a concept from the project. Requires confirm=True.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "concept_id": {"type": "string", "description": "Concept ID to delete"},
+                    "confirm": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Must be true to proceed"
+                    }
+                },
+                "required": ["project", "concept_id"]
+            }
+        ),
+        Tool(
+            name="list_conflicts",
+            description="List conflicts between AI knowledge and grounded evidence.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "status": {
+                        "type": "string",
+                        "enum": ["unresolved", "all"],
+                        "default": "unresolved",
+                        "description": "Filter by status"
+                    }
+                },
+                "required": ["project"]
+            }
+        ),
+        Tool(
+            name="resolve_conflict",
+            description="Resolve a flagged conflict between AI scaffolding and grounded evidence.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "conflict_id": {"type": "integer", "description": "Conflict ID"},
+                    "resolution": {
+                        "type": "string",
+                        "enum": ["ai_correct", "evidence_correct", "both_valid"],
+                        "description": "Resolution decision"
+                    },
+                    "note": {"type": "string", "description": "Optional explanation"}
+                },
+                "required": ["conflict_id", "resolution"]
+            }
+        ),
     ]
 
 
@@ -1130,6 +1305,55 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
     if name == "get_workflow_status":
         result = await get_workflow_status(project=arguments["project"])
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    # Concept Map tools
+    if name == "add_concepts":
+        result = add_concepts(
+            project=arguments["project"],
+            concepts=arguments["concepts"],
+            relationships=arguments.get("relationships"),
+            evidence=arguments.get("evidence")
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "show_concept_map":
+        result = show_concept_map(
+            project=arguments["project"],
+            format=arguments.get("format", "summary"),
+            filter_source=arguments.get("filter_source")
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "update_concept":
+        result = update_concept(
+            project=arguments["project"],
+            concept_id=arguments["concept_id"],
+            updates=arguments["updates"]
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "delete_concept":
+        result = delete_concept(
+            project=arguments["project"],
+            concept_id=arguments["concept_id"],
+            confirm=arguments.get("confirm", False)
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "list_conflicts":
+        result = list_conflicts(
+            project=arguments["project"],
+            status=arguments.get("status", "unresolved")
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "resolve_conflict":
+        result = resolve_conflict(
+            conflict_id=arguments["conflict_id"],
+            resolution=arguments["resolution"],
+            note=arguments.get("note")
+        )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
     return [TextContent(type="text", text=f"Unknown tool: {name}")]

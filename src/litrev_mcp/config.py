@@ -56,6 +56,14 @@ class WorkflowConfig(BaseModel):
     auto_generate_templates: bool = True
 
 
+class ConceptMapConfig(BaseModel):
+    """Configuration for concept map feature."""
+    enabled: bool = True
+    auto_extract: bool = True
+    show_scaffolding: bool = True
+    salience_threshold: float = 0.3
+
+
 class Config(BaseModel):
     """Main configuration model."""
     projects: dict[str, ProjectConfig] = Field(default_factory=dict)
@@ -64,6 +72,7 @@ class Config(BaseModel):
     better_bibtex: BetterBibTexConfig = Field(default_factory=BetterBibTexConfig)
     rag: RAGConfig = Field(default_factory=RAGConfig)
     workflow: WorkflowConfig = Field(default_factory=WorkflowConfig)
+    concept_map: ConceptMapConfig = Field(default_factory=ConceptMapConfig)
 
 
 class ConfigManager:
