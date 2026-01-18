@@ -278,8 +278,11 @@ def add_propositions(
     added_relationships = []
     added_evidence = []
 
-    # Add topics first (so we can link propositions to them)
-    topic_map = {}  # name -> topic_id
+    # Build topic_map from existing topics (so suggested_topic works for pre-existing topics)
+    existing_topics = db.get_project_topics(project)
+    topic_map = {t['name']: t['id'] for t in existing_topics}
+
+    # Add new topics (and update topic_map)
     if topics:
         for topic in topics:
             topic_name = topic['name']
@@ -541,7 +544,7 @@ def show_argument_map(
     db.init_concept_map_schema()
 
     # Get stats
-    stats = db.get_proposition_map_stats(project)
+    stats = db.get_concept_map_stats(project)
 
     # Get concepts
     concepts = db.get_project_propositions(project, filter_source=filter_source)
@@ -569,7 +572,7 @@ def show_argument_map(
             relationships = db.get_relationships(proposition_id=concept['id'])
             if relationships:
                 for rel in relationships:
-                    if rel['from_concept_id'] == concept['id']:
+                    if rel['from_proposition_id'] == concept['id']:
                         output.append(f"    -> {rel['relationship_type']}: {rel['to_name']}")
                     else:
                         output.append(f"    <- {rel['relationship_type']}: {rel['from_name']}")
@@ -1133,9 +1136,12 @@ def visualize_argument_map(
             color = prop_colors['gap'] if highlight_gaps else prop_colors['partial']
             status = 'gap'
 
+        # Salience is computed dynamically; use default for visualization
+        salience = prop.get('salience', 0.5)
+
         # Size by salience
         if show_salience:
-            size = int(prop['salience'] * 30 + 10)
+            size = int(salience * 30 + 10)
         else:
             size = 20
 
@@ -1155,7 +1161,7 @@ def visualize_argument_map(
         tooltip_lines = []
         tooltip_lines.append(f"<b>{prop['name']}</b>")
         tooltip_lines.append(f"<br>Status: {status}")
-        tooltip_lines.append(f"<br>Salience: {prop['salience']:.2f}")
+        tooltip_lines.append(f"<br>Salience: {salience:.2f}")
         if topic_names:
             tooltip_lines.append(f"<br>Topics: {', '.join(topic_names)}")
 
@@ -1185,7 +1191,7 @@ def visualize_argument_map(
     prop_ids = {p['id'] for p in all_propositions}
     project_relationships = [
         r for r in all_relationships
-        if r['from_concept_id'] in prop_ids and r['to_concept_id'] in prop_ids
+        if r['from_proposition_id'] in prop_ids and r['to_proposition_id'] in prop_ids
     ]
 
     # Add edges
@@ -1199,8 +1205,8 @@ def visualize_argument_map(
         edge_color = '#4CAF50' if rel['source'] == 'insight' else '#9E9E9E'
 
         net.add_edge(
-            rel['from_concept_id'],
-            rel['to_concept_id'],
+            rel['from_proposition_id'],
+            rel['to_proposition_id'],
             title=tooltip,
             label=rel['relationship_type'],
             color=edge_color,
@@ -1434,7 +1440,7 @@ def visualize_argument_map(
         f.write(html_content)
 
     # Get stats
-    stats = db.get_proposition_map_stats(project)
+    stats = db.get_concept_map_stats(project)
 
     return {
         'success': True,
