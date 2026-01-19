@@ -564,7 +564,7 @@ def show_argument_map(
             source_icon = "✓" if concept['source'] == 'insight' else "⚠"
             evidence_icon = f"[{concept['evidence_count']} evidence]" if concept['evidence_count'] > 0 else "[no evidence]"
 
-            output.append(f"{source_icon} {concept['name']} (salience: {concept['salience']:.2f}) {evidence_icon}")
+            output.append(f"{source_icon} {concept['name']} {evidence_icon}")
             if concept['definition']:
                 output.append(f"    {concept['definition'][:100]}...")
 
@@ -799,17 +799,17 @@ def resolve_conflict(
 
 def delete_relationship(
     project: str,
-    from_concept: str,
-    to_concept: str,
+    from_proposition: str,
+    to_proposition: str,
     relationship_type: str,
 ) -> dict:
     """
-    Delete a specific relationship between concepts.
+    Delete a specific relationship between propositions.
 
     Args:
         project: Project code (for verification)
-        from_concept: Name of the source concept
-        to_concept: Name of the target concept
+        from_proposition: Name of the source proposition
+        to_proposition: Name of the target proposition
         relationship_type: Type of relationship to delete
 
     Returns:
@@ -818,8 +818,8 @@ def delete_relationship(
     # Initialize schema if needed
     db.init_concept_map_schema()
 
-    from_id = _make_proposition_id(from_concept)
-    to_id = _make_proposition_id(to_concept)
+    from_id = _make_proposition_id(from_proposition)
+    to_id = _make_proposition_id(to_proposition)
 
     # Verify concepts exist in project
     from_exists = db.proposition_exists(from_id)
@@ -898,7 +898,9 @@ def query_propositions(
     query_lower = query.lower()
 
     for concept in concepts:
-        score = concept['salience']  # Start with base salience
+        # Start with base salience (dynamically computed, not stored)
+        # Higher base for grounded concepts (from insights)
+        score = 0.5 if concept['source'] == 'insight' or concept['evidence_count'] > 0 else 0.3
 
         # Boost if query matches name or definition
         if query_lower in concept['name'].lower():
@@ -967,8 +969,8 @@ def find_argument_gaps(
     # Initialize schema if needed
     db.init_concept_map_schema()
 
-    # Get gaps from database
-    gaps = db.find_gaps(project, min_salience)
+    # Get gaps from database (salience computed dynamically, not stored)
+    gaps = db.find_gaps(project)
 
     # Format results
     gap_list = []
@@ -977,9 +979,8 @@ def find_argument_gaps(
             'concept': gap['name'],
             'proposition_id': gap['id'],
             'definition': gap['definition'],
-            'salience': gap['salience'],
             'status': 'ai_scaffolding',
-            'why_salient': f"Salience score: {gap['salience']:.2f}. Concept is related to your research but lacks grounded evidence.",
+            'why_salient': "AI scaffolding concept without grounded evidence from your literature.",
             'suggestion': f"Search for papers about '{gap['name']}' to ground this concept in literature."
         })
 
@@ -1253,29 +1254,168 @@ def visualize_argument_map(
     with open(output_path, 'r', encoding='utf-8') as f:
         html_content = f.read()
 
-    # Inject custom HTML/JS for evidence panel and topic filter
-    import json
+    # Load issues for this project
+    issues_data = _load_issues(project)
+    open_issues = [i for i in issues_data['issues'] if i['status'] == 'open']
+
+    # Build issue lookup by proposition_id
+    issues_by_prop = {}
+    for issue in open_issues:
+        prop_id = issue['proposition_id']
+        if prop_id not in issues_by_prop:
+            issues_by_prop[prop_id] = []
+        issues_by_prop[prop_id].append(issue)
+
+    # Inject custom HTML/JS for evidence panel, topic filter, and issue tracking
     evidence_json = json.dumps(evidence_data)
     topics_json = json.dumps([{'id': t['id'], 'name': t['name']} for t in topics])
+    issues_json = json.dumps(issues_data['issues'])
+    issues_by_prop_json = json.dumps(issues_by_prop)
+    issue_types_json = json.dumps(ISSUE_TYPES)
 
+    # Get issues file path for browser
+    issues_path = _get_issues_path(project)
+    issues_filename = issues_path.name if issues_path else '_issues.json'
+
+    # custom_html now only contains styles and scripts (HTML structure is in new_body)
     custom_html = f"""
     <style>
-        #controls {{
+        body {{
+            margin: 0;
+            overflow: hidden;
+        }}
+        #app-container {{
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }}
+        #issues-panel {{
+            width: 280px;
+            min-width: 280px;
+            background: #fafafa;
+            border-right: 2px solid #ddd;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }}
+        #issues-header {{
+            padding: 15px;
+            background: #f5f5f5;
+            border-bottom: 1px solid #ddd;
+        }}
+        #issues-header h3 {{
+            margin: 0 0 10px 0;
+            color: #333;
+            font-size: 16px;
+        }}
+        #issue-status-filter {{
+            width: 100%;
+            padding: 5px;
+            font-size: 13px;
+        }}
+        #issues-list {{
+            flex: 1;
+            overflow-y: auto;
             padding: 10px;
+        }}
+        .issue-card {{
+            background: white;
+            border: 1px solid #ddd;
+            border-left: 4px solid #F44336;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            font-size: 13px;
+        }}
+        .issue-card:hover {{
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        .issue-card.resolved {{
+            border-left-color: #4CAF50;
+            opacity: 0.7;
+        }}
+        .issue-card .issue-type {{
+            display: inline-block;
+            background: #e0e0e0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }}
+        .issue-card .issue-type.needs_evidence {{ background: #FFCDD2; }}
+        .issue-card .issue-type.rephrase {{ background: #FFF9C4; }}
+        .issue-card .issue-type.wrong_topic {{ background: #E1BEE7; }}
+        .issue-card .issue-type.merge {{ background: #BBDEFB; }}
+        .issue-card .issue-type.split {{ background: #C8E6C9; }}
+        .issue-card .issue-type.delete {{ background: #FFCCBC; }}
+        .issue-card .issue-prop {{
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }}
+        .issue-card .issue-desc {{
+            color: #666;
+            font-size: 12px;
+        }}
+        #add-issue-btn {{
+            margin: 10px;
+            padding: 10px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }}
+        #add-issue-btn:hover {{
+            background: #1976D2;
+        }}
+        #main-content {{
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }}
+        #controls {{
+            padding: 10px 15px;
             background-color: #f5f5f5;
             border-bottom: 2px solid #ddd;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
         }}
         #topic-filter {{
             padding: 5px 10px;
             font-size: 14px;
-            margin-right: 10px;
+        }}
+        #graph-container {{
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }}
+        #graph-container .card {{
+            width: 100% !important;
+            height: 100% !important;
+            margin: 0 !important;
+            border: none !important;
+        }}
+        #mynetwork {{
+            width: 100% !important;
+            height: 100% !important;
+            border: none !important;
         }}
         #evidence-panel {{
             position: fixed;
             right: 20px;
             top: 80px;
             width: 350px;
-            max-height: 600px;
+            max-height: calc(100vh - 120px);
             overflow-y: auto;
             background: white;
             border: 2px solid #4CAF50;
@@ -1288,12 +1428,19 @@ def visualize_argument_map(
         #evidence-panel h3 {{
             margin-top: 0;
             color: #4CAF50;
+            padding-right: 30px;
         }}
         #evidence-panel .close-btn {{
-            float: right;
+            position: absolute;
+            right: 15px;
+            top: 10px;
             cursor: pointer;
-            font-size: 20px;
+            font-size: 24px;
             color: #999;
+            line-height: 1;
+        }}
+        #evidence-panel .close-btn:hover {{
+            color: #333;
         }}
         #evidence-panel .evidence-item {{
             margin-bottom: 15px;
@@ -1304,82 +1451,288 @@ def visualize_argument_map(
             color: #F44336;
             font-weight: bold;
         }}
+        #evidence-panel .prop-issues {{
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px solid #eee;
+        }}
+        #evidence-panel .prop-issues h4 {{
+            margin: 0 0 10px 0;
+            color: #F44336;
+        }}
+        #add-issue-to-prop-btn {{
+            margin-top: 15px;
+            padding: 8px 16px;
+            background: #FF9800;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }}
+        #add-issue-to-prop-btn:hover {{
+            background: #F57C00;
+        }}
         .legend {{
-            display: inline-block;
-            margin-left: 20px;
+            display: flex;
+            gap: 15px;
+            margin-left: auto;
         }}
         .legend-item {{
-            display: inline-block;
-            margin-right: 15px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 13px;
         }}
         .legend-box {{
-            display: inline-block;
             width: 15px;
             height: 15px;
-            margin-right: 5px;
             border: 1px solid #333;
+        }}
+        /* Modal styles */
+        .modal-overlay {{
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }}
+        .modal-overlay.active {{
+            display: flex;
+        }}
+        .modal {{
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            width: 450px;
+            max-width: 90vw;
+            max-height: 80vh;
+            overflow-y: auto;
+        }}
+        .modal h3 {{
+            margin-top: 0;
+            color: #333;
+        }}
+        .modal label {{
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }}
+        .modal select, .modal textarea {{
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }}
+        .modal textarea {{
+            min-height: 100px;
+            resize: vertical;
+        }}
+        .modal-buttons {{
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 15px;
+        }}
+        .modal-buttons button {{
+            padding: 8px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }}
+        .btn-cancel {{
+            background: #e0e0e0;
+            color: #333;
+        }}
+        .btn-cancel:hover {{
+            background: #d0d0d0;
+        }}
+        .btn-submit {{
+            background: #4CAF50;
+            color: white;
+        }}
+        .btn-submit:hover {{
+            background: #43A047;
+        }}
+        .btn-danger {{
+            background: #F44336;
+            color: white;
+        }}
+        .btn-danger:hover {{
+            background: #E53935;
+        }}
+        #file-status {{
+            padding: 5px 10px;
+            font-size: 12px;
+            background: #fff3e0;
+            border: 1px solid #FFB74D;
+            border-radius: 4px;
+            display: none;
+        }}
+        #file-status.connected {{
+            background: #E8F5E9;
+            border-color: #81C784;
         }}
     </style>
 
-    <div id="controls">
-        <label for="topic-filter">Filter by topic:</label>
-        <select id="topic-filter" onchange="filterByTopic(this.value)">
-            <option value="all">All Topics</option>
-        </select>
-
-        <div class="legend">
-            <div class="legend-item">
-                <span class="legend-box" style="background-color: #4CAF50;"></span>
-                <span>Grounded</span>
-            </div>
-            <div class="legend-item">
-                <span class="legend-box" style="background-color: #FFC107;"></span>
-                <span>Partial Evidence</span>
-            </div>
-            <div class="legend-item">
-                <span class="legend-box" style="background-color: #F44336;"></span>
-                <span>Gap</span>
-            </div>
-        </div>
-    </div>
-
-    <div id="evidence-panel">
-        <span class="close-btn" onclick="closeEvidencePanel()">&times;</span>
-        <h3 id="prop-name"></h3>
-        <div id="evidence-list"></div>
-    </div>
-
     <script type="text/javascript">
+        // Data from Python
         var evidenceData = {evidence_json};
         var topicsData = {topics_json};
+        var issuesData = {issues_json};
+        var issuesByProp = {issues_by_prop_json};
+        var issueTypes = {issue_types_json};
+        var projectCode = "{project}";
+        var issuesFilename = "{issues_filename}";
 
-        // Populate topic filter
-        var filterSelect = document.getElementById('topic-filter');
-        topicsData.forEach(function(topic) {{
-            var option = document.createElement('option');
-            option.value = topic.id;
-            option.text = topic.name;
-            filterSelect.appendChild(option);
-        }});
+        // File handle for persistence
+        var fileHandle = null;
 
-        // Handle node clicks
-        network.on("click", function(params) {{
-            if (params.nodes.length > 0) {{
-                var nodeId = params.nodes[0];
-                if (!nodeId.startsWith('topic_')) {{
-                    showEvidencePanel(nodeId);
+        // Initialize after network is ready
+        document.addEventListener('DOMContentLoaded', function() {{
+            // Wait for network to be available
+            var checkNetwork = setInterval(function() {{
+                if (typeof network !== 'undefined') {{
+                    clearInterval(checkNetwork);
+                    initializeUI();
+                    updateNodeBorders();
                 }}
-            }}
+            }}, 100);
         }});
+
+        function initializeUI() {{
+            // Populate topic filter
+            var filterSelect = document.getElementById('topic-filter');
+            topicsData.forEach(function(topic) {{
+                var option = document.createElement('option');
+                option.value = topic.id;
+                option.text = topic.name;
+                filterSelect.appendChild(option);
+            }});
+
+            // Populate proposition select in add issue modal
+            var propSelect = document.getElementById('issue-prop-select');
+            var nodes = network.body.data.nodes.get();
+            nodes.forEach(function(node) {{
+                if (!node.id.startsWith('topic_')) {{
+                    var option = document.createElement('option');
+                    option.value = node.id;
+                    option.text = node.label;
+                    propSelect.appendChild(option);
+                }}
+            }});
+
+            // Populate issue type select
+            var typeSelect = document.getElementById('issue-type-select');
+            issueTypes.forEach(function(t) {{
+                var option = document.createElement('option');
+                option.value = t;
+                option.text = t.replace(/_/g, ' ');
+                typeSelect.appendChild(option);
+            }});
+
+            // Render issues list
+            renderIssuesList('open');
+
+            // Setup click handler
+            network.on("click", function(params) {{
+                if (params.nodes.length > 0) {{
+                    var nodeId = params.nodes[0];
+                    if (!nodeId.startsWith('topic_')) {{
+                        showEvidencePanel(nodeId);
+                    }}
+                }}
+            }});
+        }}
+
+        function updateNodeBorders() {{
+            // Add red borders to nodes with open issues
+            var nodes = network.body.data.nodes;
+            var allNodes = nodes.get();
+
+            allNodes.forEach(function(node) {{
+                if (!node.id.startsWith('topic_') && issuesByProp[node.id]) {{
+                    nodes.update({{
+                        id: node.id,
+                        borderWidth: 3,
+                        color: {{
+                            ...node.color,
+                            border: '#F44336'
+                        }}
+                    }});
+                }}
+            }});
+        }}
+
+        function renderIssuesList(statusFilter) {{
+            var list = document.getElementById('issues-list');
+            var filtered = issuesData.filter(function(i) {{
+                if (statusFilter === 'all') return true;
+                return i.status === statusFilter;
+            }});
+
+            document.getElementById('issue-count').textContent = filtered.length;
+
+            if (filtered.length === 0) {{
+                list.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">No issues found</p>';
+                return;
+            }}
+
+            var html = '';
+            filtered.forEach(function(issue) {{
+                var resolvedClass = issue.status === 'resolved' ? 'resolved' : '';
+                html += '<div class="issue-card ' + resolvedClass + '" onclick="focusIssue(\\'' + issue.id + '\\')">';
+                html += '<span class="issue-type ' + issue.type + '">' + issue.type.replace(/_/g, ' ') + '</span>';
+                html += '<div class="issue-prop">' + escapeHtml(issue.proposition_name) + '</div>';
+                html += '<div class="issue-desc">' + escapeHtml(issue.description) + '</div>';
+                if (issue.status === 'open') {{
+                    html += '<button style="margin-top:8px;padding:4px 8px;font-size:11px;background:#4CAF50;color:white;border:none;border-radius:3px;cursor:pointer;" onclick="event.stopPropagation();showResolveModal(\\'' + issue.id + '\\')">Resolve</button>';
+                }}
+                html += '</div>';
+            }});
+
+            list.innerHTML = html;
+        }}
+
+        function filterIssues(status) {{
+            renderIssuesList(status);
+        }}
+
+        function focusIssue(issueId) {{
+            var issue = issuesData.find(function(i) {{ return i.id === issueId; }});
+            if (issue) {{
+                // Focus on the proposition node
+                network.focus(issue.proposition_id, {{
+                    scale: 1.5,
+                    animation: {{ duration: 500 }}
+                }});
+                network.selectNodes([issue.proposition_id]);
+                showEvidencePanel(issue.proposition_id);
+            }}
+        }}
 
         function showEvidencePanel(propId) {{
             var panel = document.getElementById('evidence-panel');
             var propName = document.getElementById('prop-name');
+            var propIdEl = document.getElementById('prop-id');
             var evidenceList = document.getElementById('evidence-list');
+            var propIssues = document.getElementById('prop-issues');
+            var propIssuesList = document.getElementById('prop-issues-list');
 
             // Get proposition name from network
             var node = network.body.data.nodes.get(propId);
             propName.textContent = node.label;
+            propIdEl.textContent = propId;
 
             // Get evidence
             var evidence = evidenceData[propId] || [];
@@ -1391,14 +1744,31 @@ def visualize_argument_map(
                 evidence.forEach(function(ev, idx) {{
                     html += '<div class="evidence-item">';
                     html += '<p><strong>Evidence ' + (idx + 1) + ':</strong></p>';
-                    html += '<p>' + ev.claim + '</p>';
+                    html += '<p>' + escapeHtml(ev.claim) + '</p>';
                     html += '<p><small>Source: ' + ev.insight_id + ' (p. ' + ev.pages + ')</small></p>';
                     if (ev.contested_by) {{
-                        html += '<p class="contested">⚠ Contested: ' + ev.contested_by + '</p>';
+                        html += '<p class="contested">⚠ Contested: ' + escapeHtml(ev.contested_by) + '</p>';
                     }}
                     html += '</div>';
                 }});
                 evidenceList.innerHTML = html;
+            }}
+
+            // Show issues for this proposition
+            var propIssueItems = issuesByProp[propId] || [];
+            if (propIssueItems.length > 0) {{
+                var issueHtml = '';
+                propIssueItems.forEach(function(issue) {{
+                    issueHtml += '<div style="margin-bottom:8px;padding:8px;background:#FFF3E0;border-radius:4px;">';
+                    issueHtml += '<span class="issue-type ' + issue.type + '">' + issue.type.replace(/_/g, ' ') + '</span>';
+                    issueHtml += '<div style="margin-top:5px;">' + escapeHtml(issue.description) + '</div>';
+                    issueHtml += '<button style="margin-top:5px;padding:3px 8px;font-size:11px;background:#4CAF50;color:white;border:none;border-radius:3px;cursor:pointer;" onclick="showResolveModal(\\'' + issue.id + '\\')">Resolve</button>';
+                    issueHtml += '</div>';
+                }});
+                propIssuesList.innerHTML = issueHtml;
+                propIssues.style.display = 'block';
+            }} else {{
+                propIssues.style.display = 'none';
             }}
 
             panel.style.display = 'block';
@@ -1413,14 +1783,12 @@ def visualize_argument_map(
             var allNodes = nodes.get();
 
             if (topicId === 'all') {{
-                // Show all proposition nodes
                 allNodes.forEach(function(node) {{
                     if (!node.id.startsWith('topic_')) {{
                         nodes.update({{id: node.id, hidden: false}});
                     }}
                 }});
             }} else {{
-                // Hide all proposition nodes not in this topic
                 allNodes.forEach(function(node) {{
                     if (!node.id.startsWith('topic_')) {{
                         var inTopic = node.group === topicId;
@@ -1429,11 +1797,321 @@ def visualize_argument_map(
                 }});
             }}
         }}
+
+        // Issue Modal Functions
+        function showAddIssueModal(preselectedPropId) {{
+            var propSelect = document.getElementById('issue-prop-select');
+            if (preselectedPropId) {{
+                propSelect.value = preselectedPropId;
+            }}
+            document.getElementById('issue-description').value = '';
+            document.getElementById('add-issue-modal').classList.add('active');
+        }}
+
+        function showAddIssueModalForProp() {{
+            var propId = document.getElementById('prop-id').textContent;
+            showAddIssueModal(propId);
+        }}
+
+        function closeAddIssueModal() {{
+            document.getElementById('add-issue-modal').classList.remove('active');
+        }}
+
+        function showResolveModal(issueId) {{
+            var issue = issuesData.find(function(i) {{ return i.id === issueId; }});
+            if (!issue) return;
+
+            document.getElementById('resolve-issue-id').value = issueId;
+            document.getElementById('resolution-text').value = '';
+
+            var detailsHtml = '<p><strong>Proposition:</strong> ' + escapeHtml(issue.proposition_name) + '</p>';
+            detailsHtml += '<p><strong>Type:</strong> ' + issue.type.replace(/_/g, ' ') + '</p>';
+            detailsHtml += '<p><strong>Description:</strong> ' + escapeHtml(issue.description) + '</p>';
+            document.getElementById('resolve-issue-details').innerHTML = detailsHtml;
+
+            document.getElementById('resolve-issue-modal').classList.add('active');
+        }}
+
+        function closeResolveModal() {{
+            document.getElementById('resolve-issue-modal').classList.remove('active');
+        }}
+
+        // File System Access API
+        async function connectToFile() {{
+            try {{
+                if (!('showSaveFilePicker' in window)) {{
+                    alert('File System Access API not supported. Changes will not persist. Use Chrome 86+ for full functionality.');
+                    return false;
+                }}
+
+                fileHandle = await window.showSaveFilePicker({{
+                    suggestedName: issuesFilename,
+                    types: [{{
+                        description: 'JSON Files',
+                        accept: {{ 'application/json': ['.json'] }}
+                    }}]
+                }});
+
+                document.getElementById('file-status').textContent = 'File connected';
+                document.getElementById('file-status').classList.add('connected');
+                document.getElementById('file-status').style.display = 'inline-block';
+
+                return true;
+            }} catch (err) {{
+                if (err.name !== 'AbortError') {{
+                    console.error('Error connecting to file:', err);
+                }}
+                return false;
+            }}
+        }}
+
+        async function saveIssues() {{
+            if (!fileHandle) {{
+                var connected = await connectToFile();
+                if (!connected) {{
+                    alert('Could not connect to file. Changes will not persist.');
+                    return false;
+                }}
+            }}
+
+            try {{
+                var writable = await fileHandle.createWritable();
+                await writable.write(JSON.stringify({{ issues: issuesData }}, null, 2));
+                await writable.close();
+                return true;
+            }} catch (err) {{
+                console.error('Error saving issues:', err);
+                alert('Error saving: ' + err.message);
+                return false;
+            }}
+        }}
+
+        async function submitNewIssue() {{
+            var propId = document.getElementById('issue-prop-select').value;
+            var issueType = document.getElementById('issue-type-select').value;
+            var description = document.getElementById('issue-description').value.trim();
+
+            if (!propId || !issueType || !description) {{
+                alert('Please fill in all fields');
+                return;
+            }}
+
+            // Get proposition name
+            var node = network.body.data.nodes.get(propId);
+            var propName = node ? node.label : propId;
+
+            // Generate new ID
+            var maxNum = 0;
+            issuesData.forEach(function(i) {{
+                if (i.id.startsWith('issue_')) {{
+                    var num = parseInt(i.id.split('_')[1], 10);
+                    if (num > maxNum) maxNum = num;
+                }}
+            }});
+            var newId = 'issue_' + String(maxNum + 1).padStart(3, '0');
+
+            // Create issue
+            var newIssue = {{
+                id: newId,
+                proposition_id: propId,
+                proposition_name: propName,
+                type: issueType,
+                description: description,
+                status: 'open',
+                created_at: new Date().toISOString(),
+                resolved_at: null,
+                resolution: null
+            }};
+
+            issuesData.push(newIssue);
+
+            // Update issuesByProp
+            if (!issuesByProp[propId]) {{
+                issuesByProp[propId] = [];
+            }}
+            issuesByProp[propId].push(newIssue);
+
+            // Save to file
+            await saveIssues();
+
+            // Update UI
+            updateNodeBorders();
+            renderIssuesList(document.getElementById('issue-status-filter').value);
+            closeAddIssueModal();
+
+            // If evidence panel is open for this prop, refresh it
+            if (document.getElementById('prop-id').textContent === propId) {{
+                showEvidencePanel(propId);
+            }}
+        }}
+
+        async function submitResolveIssue() {{
+            var issueId = document.getElementById('resolve-issue-id').value;
+            var resolution = document.getElementById('resolution-text').value.trim();
+
+            if (!resolution) {{
+                alert('Please enter resolution notes');
+                return;
+            }}
+
+            // Find and update issue
+            var issue = issuesData.find(function(i) {{ return i.id === issueId; }});
+            if (!issue) return;
+
+            issue.status = 'resolved';
+            issue.resolved_at = new Date().toISOString();
+            issue.resolution = resolution;
+
+            // Remove from issuesByProp
+            var propId = issue.proposition_id;
+            if (issuesByProp[propId]) {{
+                issuesByProp[propId] = issuesByProp[propId].filter(function(i) {{
+                    return i.id !== issueId;
+                }});
+                if (issuesByProp[propId].length === 0) {{
+                    delete issuesByProp[propId];
+                }}
+            }}
+
+            // Save to file
+            await saveIssues();
+
+            // Update UI
+            updateNodeBorders();
+            renderIssuesList(document.getElementById('issue-status-filter').value);
+            closeResolveModal();
+
+            // If evidence panel is open for this prop, refresh it
+            if (document.getElementById('prop-id').textContent === propId) {{
+                showEvidencePanel(propId);
+            }}
+        }}
+
+        function escapeHtml(text) {{
+            if (!text) return '';
+            var div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }}
     </script>
     """
 
-    # Insert custom HTML before closing body tag
-    html_content = html_content.replace('</body>', custom_html + '</body>')
+    # Restructure the HTML to wrap PyVis content in our layout
+    # PyVis generates: <body><div class="card">...</div></body>
+    # We need: <body><div id="app-container"><div id="issues-panel">...</div><div id="main-content">...<div id="graph-container"><div class="card">...</div></div></div></div></body>
+
+    import re
+
+    # Extract the body content
+    body_match = re.search(r'<body>(.*?)</body>', html_content, re.DOTALL)
+    if body_match:
+        original_body = body_match.group(1)
+
+        # Build the new body structure
+        new_body = f'''<body>
+    <div id="app-container">
+        <div id="issues-panel">
+            <div id="issues-header">
+                <h3>Issues (<span id="issue-count">0</span>)</h3>
+                <select id="issue-status-filter" onchange="filterIssues(this.value)">
+                    <option value="open">Open</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="all">All</option>
+                </select>
+            </div>
+            <div id="issues-list"></div>
+            <button id="add-issue-btn" onclick="showAddIssueModal()">+ Add Issue</button>
+        </div>
+
+        <div id="main-content">
+            <div id="controls">
+                <label for="topic-filter">Filter by topic:</label>
+                <select id="topic-filter" onchange="filterByTopic(this.value)">
+                    <option value="all">All Topics</option>
+                </select>
+
+                <span id="file-status">File not connected</span>
+
+                <div class="legend">
+                    <div class="legend-item">
+                        <span class="legend-box" style="background-color: #4CAF50;"></span>
+                        <span>Grounded</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-box" style="background-color: #FFC107;"></span>
+                        <span>Partial</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-box" style="background-color: #F44336;"></span>
+                        <span>Gap</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-box" style="background-color: white; border: 3px solid #F44336;"></span>
+                        <span>Has Issue</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="graph-container">
+                {original_body}
+            </div>
+        </div>
+    </div>
+
+    <div id="evidence-panel">
+        <span class="close-btn" onclick="closeEvidencePanel()">&times;</span>
+        <h3 id="prop-name"></h3>
+        <div id="prop-id" style="display:none;"></div>
+        <div id="evidence-list"></div>
+        <div id="prop-issues" class="prop-issues" style="display:none;">
+            <h4>Open Issues</h4>
+            <div id="prop-issues-list"></div>
+        </div>
+        <button id="add-issue-to-prop-btn" onclick="showAddIssueModalForProp()">+ Add Issue</button>
+    </div>
+
+    <!-- Add Issue Modal -->
+    <div id="add-issue-modal" class="modal-overlay">
+        <div class="modal">
+            <h3>Add Issue</h3>
+            <label for="issue-prop-select">Proposition:</label>
+            <select id="issue-prop-select"></select>
+
+            <label for="issue-type-select">Issue Type:</label>
+            <select id="issue-type-select"></select>
+
+            <label for="issue-description">Description:</label>
+            <textarea id="issue-description" placeholder="Describe the issue..."></textarea>
+
+            <div class="modal-buttons">
+                <button class="btn-cancel" onclick="closeAddIssueModal()">Cancel</button>
+                <button class="btn-submit" onclick="submitNewIssue()">Add Issue</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resolve Issue Modal -->
+    <div id="resolve-issue-modal" class="modal-overlay">
+        <div class="modal">
+            <h3>Resolve Issue</h3>
+            <div id="resolve-issue-details"></div>
+
+            <label for="resolution-text">Resolution Notes:</label>
+            <textarea id="resolution-text" placeholder="How was this issue resolved?"></textarea>
+
+            <input type="hidden" id="resolve-issue-id">
+
+            <div class="modal-buttons">
+                <button class="btn-cancel" onclick="closeResolveModal()">Cancel</button>
+                <button class="btn-submit" onclick="submitResolveIssue()">Resolve</button>
+            </div>
+        </div>
+    </div>
+
+    {custom_html}
+</body>'''
+
+        html_content = html_content.replace(body_match.group(0), new_body)
 
     # Write modified HTML back
     with open(output_path, 'w', encoding='utf-8') as f:
@@ -1452,4 +2130,298 @@ def visualize_argument_map(
                   f"Open in browser to explore {len(topics)} topics, {stats['total_concepts']} propositions, "
                   f"and {stats['relationships']} relationships. "
                   f"Click propositions to see evidence details. Use topic filter to focus."
+    }
+
+
+# ============================================================================
+# Issue Tracking Functions
+# ============================================================================
+
+# Valid issue types
+ISSUE_TYPES = [
+    'needs_evidence',  # Needs more literature support
+    'rephrase',        # Wording needs improvement
+    'wrong_topic',     # Assigned to wrong topic
+    'merge',           # Should be merged with another proposition
+    'split',           # Should be split into multiple propositions
+    'delete',          # Should be removed
+    'question',        # General question/note
+    'other',           # Freeform
+]
+
+
+def _get_issues_path(project: str) -> Path:
+    """Get the path to the project's issues JSON file."""
+    lit_path = config_manager.literature_path
+    if not lit_path:
+        return None
+    return lit_path / project / "_issues.json"
+
+
+def _load_issues(project: str) -> dict:
+    """Load issues from the project's JSON file."""
+    issues_path = _get_issues_path(project)
+    if not issues_path or not issues_path.exists():
+        return {"issues": []}
+
+    try:
+        with open(issues_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return {"issues": []}
+
+
+def _save_issues(project: str, data: dict) -> bool:
+    """Save issues to the project's JSON file."""
+    issues_path = _get_issues_path(project)
+    if not issues_path:
+        return False
+
+    # Ensure parent directory exists
+    issues_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with open(issues_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+        return True
+    except IOError:
+        return False
+
+
+def _generate_issue_id(existing_issues: list) -> str:
+    """Generate a unique issue ID."""
+    from datetime import datetime
+
+    # Find the highest existing issue number
+    max_num = 0
+    for issue in existing_issues:
+        if issue.get('id', '').startswith('issue_'):
+            try:
+                num = int(issue['id'].split('_')[1])
+                max_num = max(max_num, num)
+            except (IndexError, ValueError):
+                pass
+
+    return f"issue_{max_num + 1:03d}"
+
+
+def add_proposition_issue(
+    project: str,
+    proposition_id: str,
+    issue_type: str,
+    description: str,
+) -> dict:
+    """
+    Add an issue to a proposition for tracking needed changes.
+
+    Args:
+        project: Project code
+        proposition_id: The proposition ID to attach the issue to
+        issue_type: Type of issue (needs_evidence, rephrase, wrong_topic, merge, split, delete, question, other)
+        description: Description of the issue
+
+    Returns:
+        Success status and created issue
+    """
+    from datetime import datetime
+
+    # Validate issue type
+    if issue_type not in ISSUE_TYPES:
+        return {
+            'success': False,
+            'error': f"Invalid issue type '{issue_type}'. Must be one of: {', '.join(ISSUE_TYPES)}"
+        }
+
+    # Initialize schema to check proposition exists
+    db.init_concept_map_schema()
+
+    # Get proposition info
+    proposition = db.get_proposition(proposition_id)
+    if not proposition:
+        return {
+            'success': False,
+            'error': f"Proposition not found: {proposition_id}"
+        }
+
+    # Load existing issues
+    data = _load_issues(project)
+
+    # Create new issue
+    issue_id = _generate_issue_id(data['issues'])
+    new_issue = {
+        'id': issue_id,
+        'proposition_id': proposition_id,
+        'proposition_name': proposition['name'],
+        'type': issue_type,
+        'description': description,
+        'status': 'open',
+        'created_at': datetime.utcnow().isoformat() + 'Z',
+        'resolved_at': None,
+        'resolution': None
+    }
+
+    data['issues'].append(new_issue)
+
+    # Save
+    if not _save_issues(project, data):
+        return {
+            'success': False,
+            'error': 'Failed to save issues file'
+        }
+
+    return {
+        'success': True,
+        'issue': new_issue,
+        'message': f"Created issue {issue_id}: {issue_type} for '{proposition['name']}'"
+    }
+
+
+def list_proposition_issues(
+    project: str,
+    status: str = 'all',
+    proposition_id: Optional[str] = None,
+) -> dict:
+    """
+    List issues for a project.
+
+    Args:
+        project: Project code
+        status: Filter by status ('all', 'open', 'resolved')
+        proposition_id: Optional filter by specific proposition
+
+    Returns:
+        List of matching issues
+    """
+    data = _load_issues(project)
+    issues = data['issues']
+
+    # Filter by status
+    if status == 'open':
+        issues = [i for i in issues if i['status'] == 'open']
+    elif status == 'resolved':
+        issues = [i for i in issues if i['status'] == 'resolved']
+
+    # Filter by proposition
+    if proposition_id:
+        issues = [i for i in issues if i['proposition_id'] == proposition_id]
+
+    # Count by type
+    type_counts = {}
+    for issue in issues:
+        issue_type = issue.get('type', 'unknown')
+        type_counts[issue_type] = type_counts.get(issue_type, 0) + 1
+
+    return {
+        'success': True,
+        'project': project,
+        'status_filter': status,
+        'issues': issues,
+        'count': len(issues),
+        'by_type': type_counts,
+        'message': f"Found {len(issues)} issues"
+    }
+
+
+def resolve_proposition_issue(
+    project: str,
+    issue_id: str,
+    resolution: str,
+) -> dict:
+    """
+    Mark an issue as resolved.
+
+    Args:
+        project: Project code
+        issue_id: The issue ID to resolve
+        resolution: Notes on how the issue was resolved
+
+    Returns:
+        Success status
+    """
+    from datetime import datetime
+
+    data = _load_issues(project)
+
+    # Find the issue
+    issue = None
+    for i in data['issues']:
+        if i['id'] == issue_id:
+            issue = i
+            break
+
+    if not issue:
+        return {
+            'success': False,
+            'error': f"Issue not found: {issue_id}"
+        }
+
+    if issue['status'] == 'resolved':
+        return {
+            'success': False,
+            'error': f"Issue {issue_id} is already resolved"
+        }
+
+    # Update issue
+    issue['status'] = 'resolved'
+    issue['resolved_at'] = datetime.utcnow().isoformat() + 'Z'
+    issue['resolution'] = resolution
+
+    # Save
+    if not _save_issues(project, data):
+        return {
+            'success': False,
+            'error': 'Failed to save issues file'
+        }
+
+    return {
+        'success': True,
+        'issue': issue,
+        'message': f"Resolved issue {issue_id}: {issue['type']} for '{issue['proposition_name']}'"
+    }
+
+
+def delete_proposition_issue(
+    project: str,
+    issue_id: str,
+    confirm: bool = False,
+) -> dict:
+    """
+    Delete an issue.
+
+    Args:
+        project: Project code
+        issue_id: The issue ID to delete
+        confirm: Must be True to proceed
+
+    Returns:
+        Success status
+    """
+    if not confirm:
+        return {
+            'success': False,
+            'error': 'Must set confirm=True to delete an issue'
+        }
+
+    data = _load_issues(project)
+
+    # Find and remove the issue
+    original_count = len(data['issues'])
+    data['issues'] = [i for i in data['issues'] if i['id'] != issue_id]
+
+    if len(data['issues']) == original_count:
+        return {
+            'success': False,
+            'error': f"Issue not found: {issue_id}"
+        }
+
+    # Save
+    if not _save_issues(project, data):
+        return {
+            'success': False,
+            'error': 'Failed to save issues file'
+        }
+
+    return {
+        'success': True,
+        'message': f"Deleted issue {issue_id}"
     }
