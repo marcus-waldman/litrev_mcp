@@ -7,6 +7,7 @@ This module initializes the MCP server and registers all tools.
 import asyncio
 import json
 import logging
+import sys
 from typing import Any
 
 from mcp.server import Server
@@ -77,15 +78,26 @@ from litrev_mcp.tools.workflow import (
 )
 from litrev_mcp.tools.concept_map import (
     extract_concepts,
-    add_concepts,
-    show_concept_map,
-    update_concept,
-    delete_concept,
-    query_concepts,
-    find_concept_gaps,
-    visualize_concept_map,
+    add_propositions,
+    create_topic,
+    list_topics,
+    update_topic,
+    delete_topic,
+    assign_proposition_topic,
+    show_argument_map,
+    update_proposition,
+    delete_proposition,
+    delete_relationship,
+    query_propositions,
+    find_argument_gaps,
+    visualize_argument_map,
     list_conflicts,
     resolve_conflict,
+    add_proposition_issue,
+    list_proposition_issues,
+    resolve_proposition_issue,
+    delete_proposition_issue,
+    ISSUE_TYPES,
 )
 
 # Configure logging
@@ -847,10 +859,10 @@ async def list_tools() -> list[Tool]:
                 "required": ["project"]
             }
         ),
-        # Concept Map tools
+        # Argument Map tools (formerly Concept Map)
         Tool(
             name="extract_concepts",
-            description="Extract concepts and relationships from an insight using Claude Opus. Automatically identifies concepts, relationships, and evidence. Returns extracted data for review before adding to concept map.",
+            description="Extract argument structure from an insight using Claude Opus 4.5. Identifies topics (high-level themes), propositions (arguable assertions), evidence (citable claims), and relationships. Returns extracted data for review before adding to argument map with add_propositions.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -862,22 +874,34 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
-            name="add_concepts",
-            description="Add concepts to the concept map (after extraction or manual entry).",
+            name="add_propositions",
+            description="Add propositions and topics to the argument map (after extraction or manual entry). Accepts topics, propositions, relationships, and evidence.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "project": {"type": "string", "description": "Project code"},
-                    "concepts": {
+                    "topics": {
                         "type": "array",
-                        "description": "List of concepts to add",
+                        "description": "List of topics to add (high-level themes)",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "description": {"type": "string"}
+                            },
+                            "required": ["name"]
+                        }
+                    },
+                    "propositions": {
+                        "type": "array",
+                        "description": "List of propositions to add (arguable assertions)",
                         "items": {
                             "type": "object",
                             "properties": {
                                 "name": {"type": "string"},
                                 "definition": {"type": "string"},
                                 "source": {"type": "string", "enum": ["insight", "ai_knowledge"]},
-                                "salience_weight": {"type": "number", "default": 0.5},
+                                "suggested_topic": {"type": "string"},
                                 "aliases": {"type": "array", "items": {"type": "string"}}
                             },
                             "required": ["name", "source"]
@@ -885,7 +909,7 @@ async def list_tools() -> list[Tool]:
                     },
                     "relationships": {
                         "type": "array",
-                        "description": "List of relationships between concepts",
+                        "description": "List of relationships between propositions",
                         "items": {
                             "type": "object",
                             "properties": {
@@ -900,25 +924,98 @@ async def list_tools() -> list[Tool]:
                     },
                     "evidence": {
                         "type": "array",
-                        "description": "List of evidence linking concepts to insights",
+                        "description": "List of evidence linking propositions to insights",
                         "items": {
                             "type": "object",
                             "properties": {
-                                "concept_name": {"type": "string"},
+                                "proposition_name": {"type": "string"},
                                 "claim": {"type": "string"},
                                 "insight_id": {"type": "string"},
-                                "pages": {"type": "string"}
+                                "pages": {"type": "string"},
+                                "contested_by": {"type": "string"}
                             },
-                            "required": ["concept_name", "claim", "insight_id"]
+                            "required": ["proposition_name", "claim", "insight_id"]
                         }
                     }
                 },
-                "required": ["project", "concepts"]
+                "required": ["project", "propositions"]
+            }
+        ),
+        # Topic Management tools
+        Tool(
+            name="create_topic",
+            description="Create a new topic for organizing propositions. Topics are high-level themes that group related propositions (e.g., 'Measurement Error Problem', 'Bayesian Estimation').",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "name": {"type": "string", "description": "Topic name"},
+                    "description": {"type": "string", "description": "Optional description"}
+                },
+                "required": ["project", "name"]
             }
         ),
         Tool(
-            name="show_concept_map",
-            description="Display the concept map for a project with statistics and concept details.",
+            name="list_topics",
+            description="List all topics for a project with proposition counts.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"}
+                },
+                "required": ["project"]
+            }
+        ),
+        Tool(
+            name="update_topic",
+            description="Update a topic's name or description.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "topic_id": {"type": "string", "description": "Topic ID"},
+                    "name": {"type": "string", "description": "New name (optional)"},
+                    "description": {"type": "string", "description": "New description (optional)"}
+                },
+                "required": ["project", "topic_id"]
+            }
+        ),
+        Tool(
+            name="delete_topic",
+            description="Delete a topic. Requires confirm=True. This will unlink all propositions from this topic.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "topic_id": {"type": "string", "description": "Topic ID to delete"},
+                    "confirm": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Must be true to proceed"
+                    }
+                },
+                "required": ["topic_id"]
+            }
+        ),
+        Tool(
+            name="assign_proposition_topic",
+            description="Link a proposition to a topic (primary or secondary). Propositions can have one primary topic and multiple secondary topics.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "proposition_id": {"type": "string", "description": "Proposition ID"},
+                    "topic_id": {"type": "string", "description": "Topic ID"},
+                    "is_primary": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Whether this is the primary topic for the proposition"
+                    }
+                },
+                "required": ["proposition_id", "topic_id"]
+            }
+        ),
+        Tool(
+            name="show_argument_map",
+            description="Display the argument map for a project with statistics and concept details.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -932,20 +1029,20 @@ async def list_tools() -> list[Tool]:
                     "filter_source": {
                         "type": "string",
                         "enum": ["all", "insight", "ai_knowledge"],
-                        "description": "Filter by concept source"
+                        "description": "Filter by proposition source"
                     }
                 },
                 "required": ["project"]
             }
         ),
         Tool(
-            name="update_concept",
-            description="Update a concept's definition, salience, aliases, relationships, or evidence.",
+            name="update_proposition",
+            description="Update a proposition's definition, aliases, relationships, or evidence.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "project": {"type": "string", "description": "Project code"},
-                    "concept_id": {"type": "string", "description": "Concept ID to update"},
+                    "proposition_id": {"type": "string", "description": "Proposition ID to update"},
                     "updates": {
                         "type": "object",
                         "description": "Updates to apply",
@@ -973,29 +1070,43 @@ async def list_tools() -> list[Tool]:
                         }
                     }
                 },
-                "required": ["project", "concept_id", "updates"]
+                "required": ["project", "proposition_id", "updates"]
             }
         ),
         Tool(
-            name="delete_concept",
-            description="Remove a concept from the project. Requires confirm=True.",
+            name="delete_proposition",
+            description="Remove a proposition from the project. Requires confirm=True.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "project": {"type": "string", "description": "Project code"},
-                    "concept_id": {"type": "string", "description": "Concept ID to delete"},
+                    "proposition_id": {"type": "string", "description": "Proposition ID to delete"},
                     "confirm": {
                         "type": "boolean",
                         "default": False,
                         "description": "Must be true to proceed"
                     }
                 },
-                "required": ["project", "concept_id"]
+                "required": ["project", "proposition_id"]
             }
         ),
         Tool(
-            name="query_concepts",
-            description="Query the concept map with salience weighting. Returns concepts ranked by relevance to the query, weighted by purpose and audience context.",
+            name="delete_relationship",
+            description="Delete a specific relationship between propositions.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code (for verification)"},
+                    "from_proposition": {"type": "string", "description": "Name of the source proposition"},
+                    "to_proposition": {"type": "string", "description": "Name of the target proposition"},
+                    "relationship_type": {"type": "string", "description": "Type of relationship to delete"}
+                },
+                "required": ["project", "from_proposition", "to_proposition", "relationship_type"]
+            }
+        ),
+        Tool(
+            name="query_propositions",
+            description="Query the argument map with dynamic salience weighting. Returns concepts ranked by relevance to the query, weighted by purpose and audience context.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -1009,8 +1120,8 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
-            name="find_concept_gaps",
-            description="Identify salient concepts that lack grounded evidence. Finds AI knowledge concepts with high salience but no supporting citations from your literature.",
+            name="find_argument_gaps",
+            description="Identify salient propositions that lack grounded evidence. Finds AI knowledge concepts with high salience but no supporting citations from your literature.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -1023,8 +1134,8 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
-            name="visualize_concept_map",
-            description="Generate interactive PyVis graph visualization. Creates HTML file with color-coded nodes (green=grounded, yellow=scaffolding, red=gaps), sized by salience, with tooltips showing definitions and evidence.",
+            name="visualize_argument_map",
+            description="Generate interactive PyVis graph visualization of the hierarchical argument map. Creates HTML file with color-coded nodes (green=grounded, yellow=scaffolding, red=gaps), sized by salience, with tooltips showing definitions and evidence.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -1033,7 +1144,7 @@ async def list_tools() -> list[Tool]:
                     "filter_source": {
                         "type": "string",
                         "enum": ["all", "insight", "ai_knowledge"],
-                        "description": "Filter by concept source"
+                        "description": "Filter by proposition source"
                     },
                     "highlight_gaps": {"type": "boolean", "default": True, "description": "Highlight gaps in red"},
                     "show_salience": {"type": "boolean", "default": True, "description": "Size nodes by salience"}
@@ -1073,6 +1184,83 @@ async def list_tools() -> list[Tool]:
                     "note": {"type": "string", "description": "Optional explanation"}
                 },
                 "required": ["conflict_id", "resolution"]
+            }
+        ),
+        # Issue Tracking tools
+        Tool(
+            name="add_proposition_issue",
+            description="Add an issue to a proposition for tracking needed changes. Issue types: needs_evidence, rephrase, wrong_topic, merge, split, delete, question, other.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "proposition_id": {"type": "string", "description": "Proposition ID to attach issue to"},
+                    "issue_type": {
+                        "type": "string",
+                        "enum": ["needs_evidence", "rephrase", "wrong_topic", "merge", "split", "delete", "question", "other"],
+                        "description": "Type of issue"
+                    },
+                    "description": {"type": "string", "description": "Description of the issue"}
+                },
+                "required": ["project", "proposition_id", "issue_type", "description"]
+            }
+        ),
+        Tool(
+            name="list_proposition_issues",
+            description="List issues for a project. Filter by status (open, resolved, all) and optionally by proposition.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "status": {
+                        "type": "string",
+                        "enum": ["open", "resolved", "all"],
+                        "default": "all",
+                        "description": "Filter by issue status"
+                    },
+                    "proposition_id": {"type": "string", "description": "Filter by specific proposition (optional)"}
+                },
+                "required": ["project"]
+            }
+        ),
+        Tool(
+            name="resolve_proposition_issue",
+            description="Mark an issue as resolved with resolution notes.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "issue_id": {"type": "string", "description": "Issue ID to resolve"},
+                    "resolution": {"type": "string", "description": "Notes on how the issue was resolved"}
+                },
+                "required": ["project", "issue_id", "resolution"]
+            }
+        ),
+        Tool(
+            name="delete_proposition_issue",
+            description="Delete an issue. Requires confirm=True.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "issue_id": {"type": "string", "description": "Issue ID to delete"},
+                    "confirm": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Must be true to proceed"
+                    }
+                },
+                "required": ["project", "issue_id"]
+            }
+        ),
+        # Server management
+        Tool(
+            name="restart_server",
+            description="Restart the MCP server to reload code changes. Use this after fixing bugs or making changes to the server code. The server will exit gracefully and the MCP client will automatically restart it.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
             }
         ),
     ]
@@ -1381,41 +1569,88 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
-    if name == "add_concepts":
-        result = add_concepts(
+    if name == "add_propositions":
+        result = add_propositions(
             project=arguments["project"],
-            concepts=arguments["concepts"],
+            propositions=arguments["propositions"],
+            topics=arguments.get("topics"),
             relationships=arguments.get("relationships"),
             evidence=arguments.get("evidence")
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
-    if name == "show_concept_map":
-        result = show_concept_map(
+    # Topic Management handlers
+    if name == "create_topic":
+        result = create_topic(
+            project=arguments["project"],
+            name=arguments["name"],
+            description=arguments.get("description")
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "list_topics":
+        result = list_topics(project=arguments["project"])
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "update_topic":
+        result = update_topic(
+            project=arguments["project"],
+            topic_id=arguments["topic_id"],
+            name=arguments.get("name"),
+            description=arguments.get("description")
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "delete_topic":
+        result = delete_topic(
+            topic_id=arguments["topic_id"],
+            confirm=arguments.get("confirm", False)
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "assign_proposition_topic":
+        result = assign_proposition_topic(
+            proposition_id=arguments["proposition_id"],
+            topic_id=arguments["topic_id"],
+            is_primary=arguments.get("is_primary", False)
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "show_argument_map":
+        result = show_argument_map(
             project=arguments["project"],
             format=arguments.get("format", "summary"),
             filter_source=arguments.get("filter_source")
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
-    if name == "update_concept":
-        result = update_concept(
+    if name == "update_proposition":
+        result = update_proposition(
             project=arguments["project"],
-            concept_id=arguments["concept_id"],
+            proposition_id=arguments["proposition_id"],
             updates=arguments["updates"]
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
-    if name == "delete_concept":
-        result = delete_concept(
+    if name == "delete_proposition":
+        result = delete_proposition(
             project=arguments["project"],
-            concept_id=arguments["concept_id"],
+            proposition_id=arguments["proposition_id"],
             confirm=arguments.get("confirm", False)
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
-    if name == "query_concepts":
-        result = query_concepts(
+    if name == "delete_relationship":
+        result = delete_relationship(
+            project=arguments["project"],
+            from_proposition=arguments["from_proposition"],
+            to_proposition=arguments["to_proposition"],
+            relationship_type=arguments["relationship_type"]
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "query_propositions":
+        result = query_propositions(
             project=arguments["project"],
             query=arguments["query"],
             purpose=arguments.get("purpose"),
@@ -1424,8 +1659,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
-    if name == "find_concept_gaps":
-        result = find_concept_gaps(
+    if name == "find_argument_gaps":
+        result = find_argument_gaps(
             project=arguments["project"],
             purpose=arguments.get("purpose"),
             audience=arguments.get("audience"),
@@ -1433,8 +1668,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
-    if name == "visualize_concept_map":
-        result = visualize_concept_map(
+    if name == "visualize_argument_map":
+        result = visualize_argument_map(
             project=arguments["project"],
             output_path=arguments.get("output_path"),
             filter_source=arguments.get("filter_source"),
@@ -1457,6 +1692,54 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             note=arguments.get("note")
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    # Issue Tracking handlers
+    if name == "add_proposition_issue":
+        result = add_proposition_issue(
+            project=arguments["project"],
+            proposition_id=arguments["proposition_id"],
+            issue_type=arguments["issue_type"],
+            description=arguments["description"]
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "list_proposition_issues":
+        result = list_proposition_issues(
+            project=arguments["project"],
+            status=arguments.get("status", "all"),
+            proposition_id=arguments.get("proposition_id")
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "resolve_proposition_issue":
+        result = resolve_proposition_issue(
+            project=arguments["project"],
+            issue_id=arguments["issue_id"],
+            resolution=arguments["resolution"]
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "delete_proposition_issue":
+        result = delete_proposition_issue(
+            project=arguments["project"],
+            issue_id=arguments["issue_id"],
+            confirm=arguments.get("confirm", False)
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "restart_server":
+        logger.info("Restarting MCP server...")
+        # Return success message before exiting
+        response = [TextContent(
+            type="text",
+            text=json.dumps({
+                "success": True,
+                "message": "Server restarting... Code changes will be reloaded."
+            }, indent=2)
+        )]
+        # Exit gracefully - the MCP client will automatically restart the server
+        sys.exit(0)
+        return response  # Won't be reached but needed for type checking
 
     return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
