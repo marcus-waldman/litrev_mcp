@@ -1729,17 +1729,24 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
     if name == "restart_server":
         logger.info("Restarting MCP server...")
-        # Return success message before exiting
-        response = [TextContent(
+
+        # Schedule exit after response is sent
+        async def delayed_exit():
+            await asyncio.sleep(0.1)  # Give time for response to be sent
+            logger.info("Exiting server process...")
+            sys.exit(0)
+
+        # Schedule the exit but don't wait for it
+        asyncio.create_task(delayed_exit())
+
+        # Return success message
+        return [TextContent(
             type="text",
             text=json.dumps({
                 "success": True,
                 "message": "Server restarting... Code changes will be reloaded."
             }, indent=2)
         )]
-        # Exit gracefully - the MCP client will automatically restart the server
-        sys.exit(0)
-        return response  # Won't be reached but needed for type checking
 
     return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
