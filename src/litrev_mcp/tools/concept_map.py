@@ -828,13 +828,13 @@ def delete_relationship(
     if not from_exists:
         return {
             'success': False,
-            'error': f"Source concept '{from_concept}' not found"
+            'error': f"Source proposition '{from_proposition}' not found"
         }
 
     if not to_exists:
         return {
             'success': False,
-            'error': f"Target concept '{to_concept}' not found"
+            'error': f"Target proposition '{to_proposition}' not found"
         }
 
     # Delete the relationship
@@ -845,10 +845,10 @@ def delete_relationship(
 
     return {
         'success': True,
-        'from_concept': from_concept,
-        'to_concept': to_concept,
+        'from_proposition': from_proposition,
+        'to_proposition': to_proposition,
         'relationship_type': relationship_type,
-        'message': f"Deleted relationship: {from_concept} -{relationship_type}-> {to_concept}"
+        'message': f"Deleted relationship: {from_proposition} -{relationship_type}-> {to_proposition}"
     }
 
 
