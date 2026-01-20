@@ -723,7 +723,7 @@ def delete_proposition(
         }
 
     # Remove from this project only (don't delete globally)
-    db.unlink_concept_from_project(project, proposition_id)
+    db.unlink_proposition_from_project(project, proposition_id)
 
     return {
         'success': True,
