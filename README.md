@@ -1,25 +1,27 @@
 # litrev-mcp
 
-MCP server for AI-assisted literature review with Zotero, PubMed, and Semantic Scholar integration.
+MCP server for AI-assisted literature review with Zotero, PubMed, Semantic Scholar, and argument mapping.
 
 ## Overview
 
-An MCP (Model Context Protocol) server that provides literature review tools to Claude. Enables systematic literature discovery, retrieval, and organization with Zotero as the central repository. Supports PubMed, Semantic Scholar, and ERIC searches, citation snowballing, and a local knowledge base for storing and querying AI-generated insights from Consensus and NotebookLM.
+An MCP (Model Context Protocol) server that provides literature review tools to Claude. Enables systematic literature discovery, retrieval, and organization with Zotero as the central repository. Supports PubMed, Semantic Scholar, and ERIC searches, citation snowballing, a local knowledge base for insights, and an argument map that builds a knowledge graph from your literature with semantic search and intelligent graph traversal.
 
 ## Status
 
-✅ **v0.4.0 - Concept Map for Purpose-Driven Organization**
+✅ **v0.5.0-beta - Argument Map with GraphRAG Search**
 
-- 46 tools across 10 categories
+- 61 tools across 12 categories
 - Full Zotero integration
 - Search APIs (PubMed, Semantic Scholar, ERIC)
 - Knowledge base system
 - Semantic search over your PDFs (DuckDB + OpenAI embeddings)
-- **NEW: Concept Map for Purpose-Driven Organization** - AI-powered concept extraction, salience-weighted querying, gap detection, and interactive visualization
+- **Argument Map (beta)** - Build a knowledge graph from your literature with propositions, relationships, evidence, and topics
+- **GraphRAG Search (beta)** - Semantic search over your argument map with LLM-judged graph traversal
+- AI-powered extraction, salience-weighted querying, gap detection, and interactive visualization
+- Issue tracking for argument map maintenance
 - Project context for tailored responses (goal, audience, style)
 - Claude-powered synthesis with coverage assessment
-- Project dashboard
-- Setup wizard
+- Project dashboard and setup wizard
 
 ## Features
 
@@ -79,45 +81,51 @@ Use `/init-litrev-context PROJECT` skill for collaborative context setup.
 
 **NEW in v0.3.0**: Automatic workflow templates (`_workflow.md`, `_synthesis_notes.md`, `_gaps.md`, `_pivots.md`, `_searches.md`) created for new projects. Proactive guidance built into all tool outputs to follow best practices. See `todo/litrev_mcp_best_practices.md` for the structured workflow approach.
 
-### Concept Map (10 tools)
+### Argument Map (23 tools) — BETA
 
-**NEW in v0.4.0**: Organize knowledge by purpose-driven relevance, not just keyword search.
+> **Note:** The argument map and GraphRAG search features are in beta. Tool names, schemas, and database tables may change in future releases. Feedback welcome via [GitHub Issues](https://github.com/marcus-waldman/litrev_mcp/issues).
 
-The concept map creates a living knowledge graph from your literature, distinguishing between:
-- **Grounded concepts** (extracted from your papers with evidence)
+Build a living knowledge graph from your literature. The argument map organizes propositions (arguable assertions), relationships between them, and evidence from your papers — distinguishing between:
+- **Grounded propositions** (extracted from your papers with evidence)
 - **AI scaffolding** (structural knowledge from Claude's general knowledge)
-- **Gaps** (salient concepts without literature support)
+- **Gaps** (salient propositions without literature support)
 
-#### Core Tools:
-- `extract_concepts` - **AI extraction with Claude Opus** - Automatically extracts concepts, relationships, and evidence from saved insights. Uses Opus 4.5 for nuanced understanding of domain concepts.
-- `add_concepts` - Add concepts, relationships, and evidence to the map (after extraction or manual entry)
-- `show_concept_map` - View concept map structure with statistics and details
+#### Extraction & Core (7 tools):
+- `extract_concepts` - **AI extraction with Claude Opus 4.5** - Automatically extracts propositions, topics, relationships, and evidence from saved insights
+- `add_propositions` - Add propositions, topics, relationships, and evidence to the map (after extraction or manual entry)
+- `show_argument_map` - View argument map structure with statistics and details
+- `update_proposition` - Modify definitions, salience, relationships, or evidence
+- `delete_proposition` - Remove propositions from project
+- `delete_relationship` - Delete a specific relationship between propositions
+- `query_propositions` - **Salience-weighted search** - Find propositions relevant to your query, ranked by importance to your purpose (e.g., "Methods section for epi journal")
 
-#### Discovery & Querying:
-- `query_concepts` - **Salience-weighted search** - Find concepts relevant to your query, ranked by importance to your purpose (e.g., "Methods section for epi journal")
-- `find_concept_gaps` - **Gap detection** - Identify salient AI knowledge concepts that lack grounded evidence, with suggestions for literature searches
+#### Topics (5 tools):
+Organize propositions into high-level themes (e.g., "Measurement Error Problem", "Bayesian Estimation"):
+- `create_topic` / `list_topics` / `update_topic` / `delete_topic` - CRUD for topics
+- `assign_proposition_topic` - Link propositions to topics (primary or secondary)
 
-#### Visualization:
-- `visualize_concept_map` - **Interactive PyVis graph** - Generate HTML visualization with:
-  - Color coding: Green (grounded), Yellow (AI scaffolding), Red (gaps)
-  - Node size by salience weight
-  - Rich tooltips with definitions and evidence
-  - Directed edges labeled with relationship types
+#### Discovery & Visualization (2 tools):
+- `find_argument_gaps` - **Gap detection** - Identify salient AI knowledge propositions that lack grounded evidence, with suggestions for literature searches
+- `visualize_argument_map` - **Interactive PyVis graph** - Generate HTML visualization with color coding (green=grounded, yellow=scaffolding, red=gaps), node size by salience, rich tooltips, and directed edges
 
-#### Editing & Conflict Resolution:
-- `update_concept` - Modify concept definitions, salience, relationships, or evidence
-- `delete_concept` - Remove concepts from project (preserves global concept library)
-- `list_conflicts` - View contradictions between AI scaffolding and grounded evidence
-- `resolve_conflict` - Resolve flagged conflicts (ai_correct, evidence_correct, both_valid)
+#### Conflicts & Issues (6 tools):
+- `list_conflicts` / `resolve_conflict` - View and resolve contradictions between AI scaffolding and grounded evidence
+- `add_proposition_issue` / `list_proposition_issues` / `resolve_proposition_issue` / `delete_proposition_issue` - Track needed changes (needs_evidence, rephrase, wrong_topic, merge, split, etc.)
+
+#### GraphRAG Search (3 tools):
+Semantic search over your argument map with intelligent graph traversal — instead of loading the entire graph, find exactly the relevant subgraph:
+- `embed_propositions` - Generate embeddings for propositions (run once, then incrementally)
+- `search_argument_map` - **Semantic search + LLM-judged traversal** - Find propositions similar to your query via vector similarity, then Claude Sonnet decides how deep and which relationship types to follow for subgraph expansion
+- `expand_argument_map` - Manually expand from specific propositions along relationships (no LLM, direct control)
 
 **Three-Layer Architecture:**
-1. **Concept Map** (grounded in your literature)
+1. **Argument Map** (grounded propositions from your literature)
 2. **Salience Map** (weighted by purpose/audience - computed at query time)
 3. **AI General Knowledge** (structural scaffolding to identify gaps)
 
-**Database**: 6 tables in `literature.duckdb` (concepts, aliases, project_concepts, relationships, evidence, conflicts)
+**Database**: 10 tables in `literature.duckdb` — RAG (papers, chunks, rag_metadata) + Argument Map (propositions, aliases, project_propositions, relationships, evidence, conflicts, proposition_embeddings)
 
-**Epistemic Tagging**: Every concept and relationship marked as either `insight` (from literature) or `ai_knowledge` (from Claude's general knowledge, could be wrong).
+**Epistemic Tagging**: Every proposition and relationship marked as either `insight` (from literature) or `ai_knowledge` (from Claude's general knowledge, could be wrong).
 
 ### Test Tool (1 tool)
 - `litrev_hello` - Verify litrev-mcp is working
@@ -140,11 +148,11 @@ Before installing litrev-mcp, ensure you have:
   - Used for `index_papers`, `search_papers`, `ask_papers`
   - Costs: ~$0.10-0.50 per paper indexed, ~$0.001 per search
 
-### Required for Concept Map Extraction
+### Required for Argument Map
 
 - **Anthropic API Key** ([Get one](https://console.anthropic.com/settings/keys))
-  - Used for `extract_concepts` (Claude Opus 4.5)
-  - Costs: ~$0.03-0.10 per insight extraction
+  - Used for `extract_concepts` (Claude Opus 4.5) and `search_argument_map` (Claude Sonnet for traversal judgment)
+  - Costs: ~$0.03-0.10 per insight extraction, ~$0.003 per search traversal
 
 ### Optional (Improves Performance)
 
@@ -228,7 +236,7 @@ To find your Google Drive location, right-click the Google Drive icon in your sy
 | DuckDB index | ❌ No (per-machine) | `Literature/.litrev/literature.duckdb` |
 | Environment vars | ❌ No (per-machine) | `~/.bashrc` or `~/.zshrc` |
 
-**Important:** After setting up on a new machine, you'll need to run `index_papers` again to rebuild the RAG index.
+**Important:** After setting up on a new machine, you'll need to run `index_papers` to rebuild the RAG index and `embed_propositions` to rebuild argument map search embeddings.
 
 ### Environment Variables Setup
 
@@ -267,7 +275,7 @@ If you're using Git Bash, you can also set them in `~/.bashrc`:
 export ZOTERO_API_KEY="your-api-key-here"
 export ZOTERO_USER_ID="your-numeric-id"
 export OPENAI_API_KEY="your-openai-key"  # if using RAG
-export ANTHROPIC_API_KEY="your-anthropic-key"  # if using concept map
+export ANTHROPIC_API_KEY="your-anthropic-key"  # if using argument map
 ```
 Then close and reopen your terminal.
 
@@ -282,7 +290,7 @@ Add to your shell config file (`~/.zshrc` for newer macOS, `~/.bash_profile` for
 export ZOTERO_API_KEY="your-api-key-here"
 export ZOTERO_USER_ID="your-numeric-id"
 export OPENAI_API_KEY="your-openai-key"  # if using RAG
-export ANTHROPIC_API_KEY="your-anthropic-key"  # if using concept map
+export ANTHROPIC_API_KEY="your-anthropic-key"  # if using argument map
 ```
 
 Then:
@@ -306,7 +314,7 @@ Add to your shell config file (`~/.bashrc` or `~/.zshrc`):
 export ZOTERO_API_KEY="your-api-key-here"
 export ZOTERO_USER_ID="your-numeric-id"
 export OPENAI_API_KEY="your-openai-key"  # if using RAG
-export ANTHROPIC_API_KEY="your-anthropic-key"  # if using concept map
+export ANTHROPIC_API_KEY="your-anthropic-key"  # if using argument map
 ```
 
 Then:
@@ -450,6 +458,30 @@ Then restart Claude Code. Use `/init-litrev-context PROJECT` to collaboratively 
 > Update my MI-IC context to focus more on practical guidance for applied researchers
 ```
 
+### Argument Map
+
+```
+> Extract concepts from the latest insight in MEAS-ERR
+
+> Show the argument map for MEAS-ERR
+
+> What propositions are most relevant to my Methods section for an epi journal?
+
+> Find gaps in my MEAS-ERR argument map
+
+> Visualize the argument map for MEAS-ERR
+```
+
+### Argument Map Search (GraphRAG)
+
+```
+> Embed the propositions for my ME-BLOOD project
+
+> Search my ME-BLOOD argument map for "how does measurement error affect blood pressure estimates"
+
+> Expand from these propositions to see supporting evidence
+```
+
 ### Project Dashboard
 
 ```
@@ -465,9 +497,15 @@ Google Drive/
 └── Literature/
     ├── .litrev/
     │   ├── config.yaml          # Project configuration
-    │   └── literature.duckdb    # RAG vector index (auto-created)
+    │   └── literature.duckdb    # RAG + argument map database (auto-created)
     ├── MEAS-ERR/                # Project directory
     │   ├── _context.md          # Project context (goal, audience, style)
+    │   ├── _concept_map.html    # Argument map visualization (auto-generated)
+    │   ├── _workflow.md         # Phase-based progress tracking
+    │   ├── _synthesis_notes.md  # Narrative synthesis skeleton
+    │   ├── _gaps.md             # Gap documentation
+    │   ├── _pivots.md           # Conceptual shift tracking
+    │   ├── _searches.md         # Search reproducibility audit trail
     │   ├── _notes/              # Saved insights
     │   │   ├── 2024-01-15_consensus_simex_methods.md
     │   │   └── 2024-01-16_notebooklm_comparison.md
@@ -526,7 +564,10 @@ The `embedding_dimensions` setting controls vector size for semantic search:
 5. **Add to NotebookLM**: Upload PDFs to NotebookLM
 6. **Save insights**: Store summaries and analysis
 7. **Mark complete**: Change status to `_complete`
-8. **Synthesize**: Query your knowledge base for cross-paper insights
+8. **Build argument map**: Extract propositions from insights, organize into topics
+9. **Search your map**: Use GraphRAG search to find relevant subgraphs for your writing
+10. **Identify gaps**: Find salient propositions lacking grounded evidence
+11. **Synthesize**: Query your knowledge base for cross-paper insights
 
 ## API Keys (Optional)
 
@@ -597,9 +638,11 @@ That's it! Your config, PDFs, and notes are already synced from the first machin
 
 ## Database Management
 
-### DuckDB RAG Index
+### DuckDB Database
 
 **Location:** `Literature/.litrev/literature.duckdb`
+
+Stores both RAG search indexes (paper chunks + embeddings) and the argument map (propositions, relationships, evidence, topics, issues, proposition embeddings).
 
 **Size:** Approximately:
 - 50 papers: ~10-20 MB
@@ -725,27 +768,31 @@ Or add manually to `Literature/.litrev/config.yaml`.
 ```
 litrev-mcp/
 ├── src/litrev_mcp/
-│   ├── server.py           # MCP server entry point
-│   ├── config.py           # Configuration management
+│   ├── server.py               # MCP server entry point (61 tools)
+│   ├── config.py               # Configuration management
 │   └── tools/
-│       ├── zotero.py       # Zotero operations
-│       ├── pubmed.py       # PubMed search
-│       ├── semantic_scholar.py  # Semantic Scholar
-│       ├── eric.py         # ERIC search
-│       ├── insights.py     # Knowledge base
-│       ├── status.py       # Dashboard tools
-│       ├── setup.py        # Setup wizard
-│       ├── pdf.py          # PDF processing
-│       ├── rag.py          # RAG search tools
-│       ├── rag_db.py       # DuckDB operations
-│       └── rag_embed.py    # Embeddings & chunking
+│       ├── zotero.py           # Zotero operations
+│       ├── pubmed.py           # PubMed search
+│       ├── semantic_scholar.py # Semantic Scholar
+│       ├── eric.py             # ERIC search
+│       ├── insights.py         # Knowledge base
+│       ├── status.py           # Dashboard tools
+│       ├── setup.py            # Setup wizard
+│       ├── pdf.py              # PDF processing
+│       ├── rag.py              # RAG search tools
+│       ├── rag_db.py           # DuckDB RAG operations
+│       ├── rag_embed.py        # Embeddings & chunking
+│       ├── concept_map_db.py   # Argument map DB (propositions, topics, issues)
+│       └── argument_map_search.py  # GraphRAG search & traversal
 ├── tests/
 │   ├── test_zotero.py
 │   ├── test_search_apis.py
 │   ├── test_insights.py
 │   ├── test_status.py
 │   ├── test_setup.py
-│   └── test_rag.py
+│   ├── test_rag.py
+│   └── test_argument_map_search.py
+├── docs/                       # Reference guide (HTML)
 ├── pyproject.toml
 └── README.md
 ```

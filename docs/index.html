@@ -10,7 +10,7 @@
     <div class="container">
         <header>
             <h1>litrev-mcp Reference Guide</h1>
-            <p class="subtitle">AI-Assisted Literature Review with Zotero, PubMed, Semantic Scholar, and RAG Search</p>
+            <p class="subtitle">AI-Assisted Literature Review with Zotero, PubMed, Semantic Scholar, RAG Search, and Argument Mapping</p>
 
             <div class="search-bar">
                 <input type="text" id="search" placeholder="Search tools, commands, or topics...">
@@ -26,6 +26,7 @@
                 <li><a href="#multi-machine">Multi-Machine Setup</a></li>
                 <li><a href="#messy-zotero">I Have a Messy Zotero</a></li>
                 <li><a href="#cheat-sheet">Cheat Sheet</a></li>
+                <li><a href="#argument-map">Argument Map <span style="color:#e67e22;font-size:0.8em;">(beta)</span></a></li>
                 <li><a href="#tools">Tool Reference</a></li>
                 <li><a href="#workflows">Workflows</a></li>
                 <li><a href="#troubleshooting">Troubleshooting</a></li>
@@ -53,6 +54,16 @@
                         <ul>
                             <li>Used for: <code>index_papers</code>, <code>search_papers</code>, <code>ask_papers</code></li>
                             <li>Costs: ~$0.10-0.50 per paper indexed, ~$0.001 per search</li>
+                        </ul>
+                    </li>
+                </ul>
+
+                <h3>Required for Argument Map</h3>
+                <ul>
+                    <li><strong>Anthropic API Key</strong> - <a href="https://console.anthropic.com/settings/keys" target="_blank">Get one</a>
+                        <ul>
+                            <li>Used for: <code>extract_concepts</code> (Claude Opus 4.5), <code>search_argument_map</code> (Claude Sonnet for traversal)</li>
+                            <li>Costs: ~$0.03-0.10 per extraction, ~$0.003 per search</li>
                         </ul>
                     </li>
                 </ul>
@@ -134,6 +145,7 @@
                     <li><code>ZOTERO_API_KEY</code> - From <a href="https://www.zotero.org/settings/keys" target="_blank">https://www.zotero.org/settings/keys</a></li>
                     <li><code>ZOTERO_USER_ID</code> - Numeric User ID from same page</li>
                     <li><code>OPENAI_API_KEY</code> - From <a href="https://platform.openai.com/api-keys" target="_blank">https://platform.openai.com/api-keys</a></li>
+                    <li><code>ANTHROPIC_API_KEY</code> - From <a href="https://console.anthropic.com/settings/keys" target="_blank">https://console.anthropic.com/settings/keys</a> (for argument map)</li>
                 </ul>
 
                 <p><strong>Optional:</strong></p>
@@ -482,6 +494,54 @@ source ~/.bashrc  # or ~/.zshrc</code></pre>
                     </div>
                 </div>
 
+                <h3>Argument Map</h3>
+                <div class="prompt-group">
+                    <div class="prompt-box">
+                        <code>Extract concepts from the latest insight in PROJECT</code>
+                        <button class="copy-btn" data-text="Extract concepts from the latest insight in PROJECT">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Show the argument map for PROJECT</code>
+                        <button class="copy-btn" data-text="Show the argument map for PROJECT">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>What propositions are most relevant to my Methods section?</code>
+                        <button class="copy-btn" data-text="What propositions are most relevant to my Methods section?">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Find gaps in my PROJECT argument map</code>
+                        <button class="copy-btn" data-text="Find gaps in my PROJECT argument map">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Visualize the argument map for PROJECT</code>
+                        <button class="copy-btn" data-text="Visualize the argument map for PROJECT">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>List all topics for PROJECT</code>
+                        <button class="copy-btn" data-text="List all topics for PROJECT">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Show open issues for PROJECT</code>
+                        <button class="copy-btn" data-text="Show open issues for PROJECT">Copy</button>
+                    </div>
+                </div>
+
+                <h3>Argument Map Search (GraphRAG)</h3>
+                <div class="prompt-group">
+                    <div class="prompt-box">
+                        <code>Embed the propositions for my PROJECT</code>
+                        <button class="copy-btn" data-text="Embed the propositions for my PROJECT">Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Search my PROJECT argument map for "QUERY"</code>
+                        <button class="copy-btn" data-text='Search my PROJECT argument map for "QUERY"'>Copy</button>
+                    </div>
+                    <div class="prompt-box">
+                        <code>Expand from these propositions to see what supports and contradicts them</code>
+                        <button class="copy-btn" data-text="Expand from these propositions to see what supports and contradicts them">Copy</button>
+                    </div>
+                </div>
+
                 <h3>Writing Support</h3>
                 <div class="prompt-group">
                     <div class="prompt-box">
@@ -495,10 +555,50 @@ source ~/.bashrc  # or ~/.zshrc</code></pre>
                 </div>
             </section>
 
+            <!-- Argument Map -->
+            <section id="argument-map">
+                <h2>🗺️ Argument Map <span style="background:#e67e22;color:white;padding:2px 8px;border-radius:4px;font-size:0.6em;vertical-align:middle;">BETA</span></h2>
+                <p style="background: #fff3cd; padding: 12px; border-left: 4px solid #ffc107; margin: 12px 0;">
+                    <strong>Beta:</strong> The argument map and GraphRAG search features are in active development. Tool names, schemas, and database tables may change in future releases. <a href="https://github.com/marcus-waldman/litrev_mcp/issues" target="_blank">Feedback welcome.</a>
+                </p>
+                <p>The argument map builds a living knowledge graph from your literature, organized by purpose-driven relevance. It distinguishes between <strong>grounded propositions</strong> (from your papers), <strong>AI scaffolding</strong> (from Claude's general knowledge), and <strong>gaps</strong> (important propositions lacking evidence).</p>
+
+                <h3>Building Your Argument Map</h3>
+                <p>The typical workflow for building an argument map from your literature:</p>
+                <ol>
+                    <li><strong>Save insights</strong> — Save Consensus/NotebookLM summaries for your papers</li>
+                    <li><strong>Extract propositions</strong> — <code>extract_concepts</code> uses Claude Opus 4.5 to identify propositions, relationships, and evidence from each insight</li>
+                    <li><strong>Review and add</strong> — Review the extracted data, then <code>add_propositions</code> to commit to the map</li>
+                    <li><strong>Organize into topics</strong> — Use <code>create_topic</code> and <code>assign_proposition_topic</code> to group related propositions</li>
+                    <li><strong>Query by purpose</strong> — <code>query_propositions</code> ranks propositions by salience to your specific writing context</li>
+                    <li><strong>Find gaps</strong> — <code>find_argument_gaps</code> shows where you need more evidence</li>
+                    <li><strong>Visualize</strong> — <code>visualize_argument_map</code> generates an interactive HTML graph</li>
+                </ol>
+
+                <h3>GraphRAG Search</h3>
+                <p>For large argument maps, instead of loading the entire graph, use semantic search to find exactly the relevant subgraph:</p>
+                <ol>
+                    <li><strong>Embed once</strong> — <code>embed_propositions</code> generates vector embeddings for all propositions (incremental, only new ones)</li>
+                    <li><strong>Search</strong> — <code>search_argument_map</code> finds seed propositions via vector similarity, then Claude Sonnet decides how deep to traverse and which relationship types to follow</li>
+                    <li><strong>Expand</strong> — <code>expand_argument_map</code> lets you manually follow relationships from specific propositions</li>
+                </ol>
+
+                <h3>Key Concepts</h3>
+                <ul>
+                    <li><strong>Propositions</strong> — Arguable assertions (e.g., "SIMEX provides consistent estimates under measurement error")</li>
+                    <li><strong>Topics</strong> — High-level themes that group propositions (e.g., "Measurement Error Correction Methods")</li>
+                    <li><strong>Relationships</strong> — Typed connections: supports, contradicts, extends, qualifies, necessitates, leads_to, precedes, enables, depends_on</li>
+                    <li><strong>Evidence</strong> — Citable claims linking propositions to specific insights and page numbers</li>
+                    <li><strong>Epistemic tags</strong> — <code>insight</code> (grounded in your literature) vs <code>ai_knowledge</code> (from Claude, could be wrong)</li>
+                    <li><strong>Issues</strong> — Track needed changes: needs_evidence, rephrase, wrong_topic, merge, split, delete, question</li>
+                    <li><strong>Salience</strong> — Query-time weighting by purpose/audience (e.g., "Methods section for epi journal")</li>
+                </ul>
+            </section>
+
             <!-- Tool Reference -->
             <section id="tools">
                 <h2>🛠️ Tool Reference</h2>
-                <p>All 36 MCP tools organized by category:</p>
+                <p>All 61 MCP tools organized by category:</p>
 
                 <h3>Zotero Integration (10 tools)</h3>
                 <table class="tool-table">
@@ -629,7 +729,7 @@ source ~/.bashrc  # or ~/.zshrc</code></pre>
                     </tbody>
                 </table>
 
-                <h3>RAG Literature Search (4 tools)</h3>
+                <h3>RAG Literature Search (5 tools)</h3>
                 <table class="tool-table">
                     <thead>
                         <tr>
@@ -641,8 +741,13 @@ source ~/.bashrc  # or ~/.zshrc</code></pre>
                     <tbody>
                         <tr>
                             <td><code>index_papers</code></td>
-                            <td>Index PDFs for semantic search (extracts text, chunks, generates embeddings)</td>
+                            <td>Index PDFs for semantic search (extracts text, chunks, generates embeddings). May timeout on large collections; use <code>generate_index_script</code> instead.</td>
                             <td><code>project</code>, <code>force_reindex</code> (optional)</td>
+                        </tr>
+                        <tr>
+                            <td><code>generate_index_script</code></td>
+                            <td>Generate a standalone Python script for indexing papers. Recommended for large collections to avoid MCP timeout.</td>
+                            <td><code>project</code></td>
                         </tr>
                         <tr>
                             <td><code>search_papers</code></td>
@@ -651,7 +756,7 @@ source ~/.bashrc  # or ~/.zshrc</code></pre>
                         </tr>
                         <tr>
                             <td><code>ask_papers</code></td>
-                            <td>Ask questions about your literature; uses Claude to synthesize a reasoned answer with honest assessment of coverage adequacy and recommendations for follow-up searches when gaps exist</td>
+                            <td>Ask questions about your literature; uses Claude to synthesize a reasoned answer with honest assessment of coverage adequacy</td>
                             <td><code>question</code>, <code>project</code> (optional), <code>max_passages</code> (default: 10)</td>
                         </tr>
                         <tr>
@@ -785,6 +890,204 @@ source ~/.bashrc  # or ~/.zshrc</code></pre>
                     </ul>
                     <p>All tool outputs now include proactive guidance for next steps and best practices. See <code>todo/litrev_mcp_best_practices.md</code> for the complete structured workflow approach.</p>
                 </div>
+
+                <h3>Argument Map — Core (7 tools) <span style="background:#e67e22;color:white;padding:1px 6px;border-radius:3px;font-size:0.75em;">BETA</span></h3>
+                <table class="tool-table">
+                    <thead>
+                        <tr>
+                            <th>Tool</th>
+                            <th>What it does</th>
+                            <th>Key Parameters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>extract_concepts</code></td>
+                            <td>AI extraction with Claude Opus 4.5 — extracts propositions, topics, relationships, and evidence from a saved insight</td>
+                            <td><code>project</code>, <code>insight_id</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>add_propositions</code></td>
+                            <td>Add propositions, topics, relationships, and evidence to the argument map (after extraction or manual entry)</td>
+                            <td><code>project</code>, <code>propositions</code>, <code>topics</code> (opt), <code>relationships</code> (opt), <code>evidence</code> (opt)</td>
+                        </tr>
+                        <tr>
+                            <td><code>show_argument_map</code></td>
+                            <td>Display argument map structure with statistics and details</td>
+                            <td><code>project</code>, <code>format</code> (summary/detailed), <code>filter_source</code> (opt)</td>
+                        </tr>
+                        <tr>
+                            <td><code>update_proposition</code></td>
+                            <td>Modify a proposition's definition, salience, aliases, relationships, or evidence</td>
+                            <td><code>project</code>, <code>proposition_id</code>, <code>updates</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>delete_proposition</code></td>
+                            <td>Remove a proposition from the project (requires confirm=True)</td>
+                            <td><code>project</code>, <code>proposition_id</code>, <code>confirm</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>delete_relationship</code></td>
+                            <td>Delete a specific relationship between propositions</td>
+                            <td><code>project</code>, <code>from_proposition</code>, <code>to_proposition</code>, <code>relationship_type</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>query_propositions</code></td>
+                            <td>Salience-weighted search — find propositions ranked by relevance to your query, weighted by purpose/audience context</td>
+                            <td><code>project</code>, <code>query</code>, <code>purpose</code> (opt), <code>audience</code> (opt)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Argument Map — Topics (5 tools)</h3>
+                <table class="tool-table">
+                    <thead>
+                        <tr>
+                            <th>Tool</th>
+                            <th>What it does</th>
+                            <th>Key Parameters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>create_topic</code></td>
+                            <td>Create a topic for organizing propositions (e.g., "Measurement Error Problem")</td>
+                            <td><code>project</code>, <code>name</code>, <code>description</code> (opt)</td>
+                        </tr>
+                        <tr>
+                            <td><code>list_topics</code></td>
+                            <td>List all topics for a project with proposition counts</td>
+                            <td><code>project</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>update_topic</code></td>
+                            <td>Update a topic's name or description</td>
+                            <td><code>project</code>, <code>topic_id</code>, <code>name</code> (opt), <code>description</code> (opt)</td>
+                        </tr>
+                        <tr>
+                            <td><code>delete_topic</code></td>
+                            <td>Delete a topic (unlinks all propositions, requires confirm=True)</td>
+                            <td><code>topic_id</code>, <code>confirm</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>assign_proposition_topic</code></td>
+                            <td>Link a proposition to a topic (primary or secondary)</td>
+                            <td><code>proposition_id</code>, <code>topic_id</code>, <code>is_primary</code> (opt)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Argument Map — Discovery & Visualization (2 tools)</h3>
+                <table class="tool-table">
+                    <thead>
+                        <tr>
+                            <th>Tool</th>
+                            <th>What it does</th>
+                            <th>Key Parameters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>find_argument_gaps</code></td>
+                            <td>Identify salient AI knowledge propositions lacking grounded evidence, with search suggestions</td>
+                            <td><code>project</code>, <code>purpose</code> (opt), <code>audience</code> (opt), <code>min_salience</code> (opt)</td>
+                        </tr>
+                        <tr>
+                            <td><code>visualize_argument_map</code></td>
+                            <td>Interactive PyVis graph — color-coded nodes (green=grounded, yellow=scaffolding, red=gaps), sized by salience, with tooltips</td>
+                            <td><code>project</code>, <code>filter_source</code> (opt), <code>highlight_gaps</code> (opt), <code>show_salience</code> (opt)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Argument Map — Conflicts & Issues (6 tools)</h3>
+                <table class="tool-table">
+                    <thead>
+                        <tr>
+                            <th>Tool</th>
+                            <th>What it does</th>
+                            <th>Key Parameters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>list_conflicts</code></td>
+                            <td>List contradictions between AI scaffolding and grounded evidence</td>
+                            <td><code>project</code>, <code>status</code> (unresolved/all)</td>
+                        </tr>
+                        <tr>
+                            <td><code>resolve_conflict</code></td>
+                            <td>Resolve a flagged conflict (ai_correct, evidence_correct, both_valid)</td>
+                            <td><code>conflict_id</code>, <code>resolution</code>, <code>note</code> (opt)</td>
+                        </tr>
+                        <tr>
+                            <td><code>add_proposition_issue</code></td>
+                            <td>Flag a proposition for needed changes (needs_evidence, rephrase, wrong_topic, merge, split, delete, question)</td>
+                            <td><code>project</code>, <code>proposition_id</code>, <code>issue_type</code>, <code>description</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>list_proposition_issues</code></td>
+                            <td>List issues for a project, filtered by status or proposition</td>
+                            <td><code>project</code>, <code>status</code> (open/resolved/all), <code>proposition_id</code> (opt)</td>
+                        </tr>
+                        <tr>
+                            <td><code>resolve_proposition_issue</code></td>
+                            <td>Mark an issue as resolved with notes</td>
+                            <td><code>project</code>, <code>issue_id</code>, <code>resolution</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>delete_proposition_issue</code></td>
+                            <td>Delete an issue (requires confirm=True)</td>
+                            <td><code>project</code>, <code>issue_id</code>, <code>confirm</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Argument Map — GraphRAG Search (3 tools) <span style="background:#e67e22;color:white;padding:1px 6px;border-radius:3px;font-size:0.75em;">BETA</span></h3>
+                <table class="tool-table">
+                    <thead>
+                        <tr>
+                            <th>Tool</th>
+                            <th>What it does</th>
+                            <th>Key Parameters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>embed_propositions</code></td>
+                            <td>Generate embeddings for propositions (required before search). Skips already-embedded unless force=True.</td>
+                            <td><code>project</code>, <code>force</code> (opt)</td>
+                        </tr>
+                        <tr>
+                            <td><code>search_argument_map</code></td>
+                            <td>Semantic search with LLM-judged graph traversal — finds seed propositions via vector similarity, Claude Sonnet decides traversal depth/types, returns focused subgraph</td>
+                            <td><code>project</code>, <code>query</code>, <code>max_results</code> (opt, 1-30)</td>
+                        </tr>
+                        <tr>
+                            <td><code>expand_argument_map</code></td>
+                            <td>Manually expand from specific propositions along relationships (no LLM, direct control)</td>
+                            <td><code>project</code>, <code>proposition_ids</code>, <code>hop_depth</code> (opt, 1-3), <code>relationship_types</code> (opt)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Server (1 tool)</h3>
+                <table class="tool-table">
+                    <thead>
+                        <tr>
+                            <th>Tool</th>
+                            <th>What it does</th>
+                            <th>Key Parameters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>restart_server</code></td>
+                            <td>Restart the MCP server to reload code changes</td>
+                            <td>None</td>
+                        </tr>
+                    </tbody>
+                </table>
 
                 <h3>Test Tool (1 tool)</h3>
                 <table class="tool-table">
@@ -938,6 +1241,46 @@ Start with a key paper
 └──────────────┘
                 </pre>
 
+                <h3>Argument Map</h3>
+                <pre class="workflow-diagram">
+┌──────────────┐
+│    Save      │  Save NotebookLM/Consensus summaries
+│   Insights   │  to project _notes/
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│   Extract    │  Claude Opus 4.5 identifies propositions,
+│   Concepts   │  relationships, evidence from each insight
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│  Review &    │  Review extracted data, then commit
+│    Add       │  to the argument map
+└──────┬───────┘
+       │
+       ├──────────────────┐
+       ▼                  ▼
+┌──────────────┐  ┌──────────────┐
+│  Organize    │  │   Embed      │
+│  into Topics │  │ Propositions │  (for GraphRAG search)
+└──────┬───────┘  └──────┬───────┘
+       │                  │
+       ▼                  ▼
+┌──────────────┐  ┌──────────────┐
+│  Query by    │  │   Search     │  Semantic search +
+│   Purpose    │  │   Map        │  LLM-judged traversal
+└──────┬───────┘  └──────┬───────┘
+       │                  │
+       └──────────┬───────┘
+                  ▼
+          ┌──────────────┐
+          │  Find Gaps   │  Salient propositions
+          │  & Visualize │  lacking evidence
+          └──────────────┘
+                </pre>
+
                 <h3>Common Scenarios</h3>
 
                 <details>
@@ -970,6 +1313,20 @@ Start with a key paper
                         <li>Get citation keys for papers you want to cite</li>
                         <li>Search Zotero library for specific claims or methods</li>
                         <li>Write synthesis notes as you draft sections</li>
+                    </ol>
+                </details>
+
+                <details>
+                    <summary><strong>Building an argument map for your paper</strong></summary>
+                    <ol>
+                        <li>Save insights for each paper in your project</li>
+                        <li>Run <code>extract_concepts</code> on each insight</li>
+                        <li>Review extracted propositions and <code>add_propositions</code></li>
+                        <li>Create topics to organize your argument structure</li>
+                        <li>Run <code>embed_propositions</code> to enable semantic search</li>
+                        <li>Use <code>search_argument_map</code> to find relevant subgraphs for each section</li>
+                        <li>Run <code>find_argument_gaps</code> to identify where you need more literature</li>
+                        <li>Use <code>visualize_argument_map</code> to see the big picture</li>
                     </ol>
                 </details>
 
@@ -1108,6 +1465,21 @@ claude mcp add litrev -- /full/path/to/.venv/Scripts/python.exe -m litrev_mcp.se
                     <li>Use OCR software to create a searchable PDF first</li>
                 </ul>
 
+                <h3>Argument map search returns no results</h3>
+                <p><strong>Problem:</strong> <code>search_argument_map</code> returns empty or error</p>
+                <p><strong>Solutions:</strong></p>
+                <ol>
+                    <li>Run <code>embed_propositions</code> first — embeddings are required for search</li>
+                    <li>Check that propositions exist: use <code>show_argument_map</code></li>
+                    <li>If propositions were recently updated, re-run <code>embed_propositions</code> to catch stale embeddings</li>
+                    <li>Verify <code>OPENAI_API_KEY</code> is set (needed for embeddings)</li>
+                    <li>Verify <code>ANTHROPIC_API_KEY</code> is set (needed for traversal judgment)</li>
+                </ol>
+
+                <h3>"ANTHROPIC_API_KEY not set" for argument map</h3>
+                <p><strong>Cause:</strong> Anthropic key required for <code>extract_concepts</code> and <code>search_argument_map</code></p>
+                <p><strong>Fix:</strong> Set <code>export ANTHROPIC_API_KEY="your-key"</code> and reload shell</p>
+
                 <h3>Server not responding</h3>
                 <p><strong>Problem:</strong> Claude Code doesn't show litrev-mcp tools</p>
                 <p><strong>Solutions:</strong></p>
@@ -1120,7 +1492,7 @@ claude mcp add litrev -- /full/path/to/.venv/Scripts/python.exe -m litrev_mcp.se
             </section>
 
             <footer>
-                <p>Built with litrev-mcp v0.2.2 | <a href="https://github.com/marcus-waldman/litrev_mcp" target="_blank">GitHub</a></p>
+                <p>Built with litrev-mcp v0.5.0 | <a href="https://github.com/marcus-waldman/litrev_mcp" target="_blank">GitHub</a></p>
             </footer>
         </main>
     </div>
