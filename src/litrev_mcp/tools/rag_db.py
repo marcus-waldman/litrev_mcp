@@ -43,6 +43,13 @@ def close_connection():
         _connection = None
 
 
+def checkpoint():
+    """Force a WAL checkpoint to persist changes to the main database file."""
+    global _connection
+    if _connection is not None:
+        _connection.execute("CHECKPOINT")
+
+
 def get_embedding_dimensions() -> int:
     """Get configured embedding dimensions."""
     return config_manager.config.rag.embedding_dimensions

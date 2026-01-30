@@ -99,6 +99,11 @@ from litrev_mcp.tools.concept_map import (
     delete_proposition_issue,
     ISSUE_TYPES,
 )
+from litrev_mcp.tools.argument_map_search import (
+    embed_propositions,
+    search_argument_map,
+    expand_argument_map,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -1253,6 +1258,74 @@ async def list_tools() -> list[Tool]:
                 "required": ["project", "issue_id"]
             }
         ),
+        # Argument Map Search (GraphRAG traversal)
+        Tool(
+            name="embed_propositions",
+            description="Generate embeddings for all propositions in a project's argument map. Required before using search_argument_map. Embeds proposition names and definitions using OpenAI text-embedding-3-small. Skips already-embedded propositions unless force=True.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "force": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "If true, re-embed all propositions even if already embedded"
+                    }
+                },
+                "required": ["project"]
+            }
+        ),
+        Tool(
+            name="search_argument_map",
+            description="Semantic search over the argument map with intelligent graph traversal. Finds propositions similar to your query via vector similarity, then expands along relationships using LLM-judged traversal depth and relationship types. Returns a focused subgraph with propositions, relationships, and evidence. Requires embed_propositions to be run first.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "query": {"type": "string", "description": "Natural language query about the argument map"},
+                    "max_results": {
+                        "type": "integer",
+                        "default": 10,
+                        "minimum": 1,
+                        "maximum": 30,
+                        "description": "Maximum propositions to return"
+                    }
+                },
+                "required": ["project", "query"]
+            }
+        ),
+        Tool(
+            name="expand_argument_map",
+            description="Manually expand from specific propositions in the argument map. Use this to explore further from propositions returned by search_argument_map. Follows relationships outward from the given propositions without LLM judgment.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project code"},
+                    "proposition_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of proposition IDs to expand from"
+                    },
+                    "hop_depth": {
+                        "type": "integer",
+                        "default": 1,
+                        "minimum": 1,
+                        "maximum": 3,
+                        "description": "How many relationship hops to follow"
+                    },
+                    "relationship_types": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": ["supports", "contradicts", "extends", "qualifies",
+                                     "necessitates", "leads_to", "precedes", "enables", "depends_on"]
+                        },
+                        "description": "Only follow these relationship types (default: all)"
+                    }
+                },
+                "required": ["project", "proposition_ids"]
+            }
+        ),
         # Server management
         Tool(
             name="restart_server",
@@ -1724,6 +1797,31 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             project=arguments["project"],
             issue_id=arguments["issue_id"],
             confirm=arguments.get("confirm", False)
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    # Argument Map Search (GraphRAG traversal)
+    if name == "embed_propositions":
+        result = embed_propositions(
+            project=arguments["project"],
+            force=arguments.get("force", False),
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "search_argument_map":
+        result = search_argument_map(
+            project=arguments["project"],
+            query=arguments["query"],
+            max_results=arguments.get("max_results", 10),
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "expand_argument_map":
+        result = expand_argument_map(
+            project=arguments["project"],
+            proposition_ids=arguments["proposition_ids"],
+            hop_depth=arguments.get("hop_depth", 1),
+            relationship_types=arguments.get("relationship_types"),
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
