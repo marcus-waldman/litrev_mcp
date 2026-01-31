@@ -640,7 +640,7 @@ def main():
         from litrev_mcp.config import config_manager
         from litrev_mcp.tools.zotero import get_zotero_client, get_citation_key_from_extra, format_authors
         from litrev_mcp.tools.rag_db import get_connection, paper_exists, delete_paper, insert_paper, insert_chunks_batch
-        from litrev_mcp.tools.rag_embed import extract_pdf_text_with_pages, chunk_text, embed_texts
+        from litrev_mcp.tools.rag_embed import extract_pdf_text, chunk_text, embed_texts
         from litrev_mcp.tools.pdf_utils import generate_citation_key
     except ImportError as e:
         print(f"ERROR: Could not import litrev_mcp: {{e}}")
@@ -720,7 +720,7 @@ def main():
 
         try:
             # Extract text
-            text, page_breaks = extract_pdf_text_with_pages(pdf_path)
+            text, page_breaks = extract_pdf_text(pdf_path, use_mathpix=True)
             if not text.strip():
                 print("  SKIP: No extractable text")
                 skipped += 1
