@@ -4,6 +4,7 @@ Setup wizard for litrev-mcp.
 Helps users configure their environment and create projects.
 """
 
+import os
 from typing import Any, Optional
 from pathlib import Path
 
@@ -143,6 +144,10 @@ async def setup_check() -> dict[str, Any]:
             })
             all_good = False
 
+        # Check Mathpix credentials (optional)
+        mathpix_id = os.environ.get("MATHPIX_APP_ID")
+        mathpix_key = os.environ.get("MATHPIX_APP_KEY")
+
         # Determine overall status
         if all_good and not warnings:
             status = 'ready'
@@ -167,6 +172,7 @@ async def setup_check() -> dict[str, Any]:
             'credentials': {
                 'zotero_api_key': 'set' if zotero_key else 'not set',
                 'zotero_user_id': zotero_user if zotero_user else 'not set',
+                'mathpix': 'set' if (mathpix_id and mathpix_key) else 'not set (optional)',
             },
         }
 

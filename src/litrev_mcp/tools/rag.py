@@ -24,6 +24,7 @@ from litrev_mcp.tools.rag_db import (
 )
 from litrev_mcp.tools.rag_embed import (
     extract_pdf_text_with_pages,
+    extract_pdf_text,
     chunk_text,
     embed_texts,
     embed_query,
@@ -35,6 +36,7 @@ from litrev_mcp.tools.context import get_context_text
 async def index_papers(
     project: str,
     force_reindex: bool = False,
+    use_mathpix: bool = False,
 ) -> dict[str, Any]:
     """
     Index PDFs from a project for semantic search.
@@ -110,6 +112,7 @@ async def index_papers(
             project_path=project_path,
             project=project,
             force_reindex=force_reindex,
+            use_mathpix=use_mathpix,
         )
 
         total_chunks = sum(p['chunks'] for p in results['indexed'])
@@ -159,6 +162,7 @@ def _index_papers_sequential(
     project_path: Path,
     project: str,
     force_reindex: bool,
+    use_mathpix: bool = False,
 ) -> dict:
     """Process papers sequentially (simpler, just as fast since DB writes serialize)."""
     indexed = []
@@ -188,7 +192,7 @@ def _index_papers_sequential(
                 delete_paper(item_key)
 
             # Extract, chunk, embed, save
-            text, page_breaks = extract_pdf_text_with_pages(pdf_path)
+            text, page_breaks = extract_pdf_text(pdf_path, use_mathpix=use_mathpix)
             if not text.strip():
                 skipped.append({'item_key': item_key, 'citation_key': citation_key, 'reason': 'No extractable text'})
                 continue

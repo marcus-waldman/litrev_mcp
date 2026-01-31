@@ -5,6 +5,7 @@ Handles PDF text extraction with page tracking, text chunking,
 and OpenAI embedding generation.
 """
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -14,6 +15,8 @@ import pdfplumber
 from openai import OpenAI
 
 from litrev_mcp.config import config_manager
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingError(Exception):
@@ -99,6 +102,28 @@ def extract_pdf_text_with_pages(filepath: Path) -> tuple[str, list[int]]:
         raise ValueError(f"Failed to extract text from PDF: {e}")
 
     return full_text.strip(), page_breaks
+
+
+def extract_pdf_text(filepath: Path, use_mathpix: bool = False) -> tuple[str, list[int]]:
+    """Extract text from a PDF, optionally using Mathpix with pdfplumber fallback.
+
+    Args:
+        filepath: Path to PDF file
+        use_mathpix: If True, try Mathpix first, fall back to pdfplumber on error
+
+    Returns:
+        Tuple of (full_text, page_break_positions)
+    """
+    if use_mathpix:
+        try:
+            from litrev_mcp.tools.mathpix import (
+                extract_pdf_text_with_pages_mathpix,
+                MathpixError,
+            )
+            return extract_pdf_text_with_pages_mathpix(filepath)
+        except Exception as e:
+            logger.warning(f"Mathpix extraction failed, falling back to pdfplumber: {e}")
+    return extract_pdf_text_with_pages(filepath)
 
 
 def _clean_text(text: str) -> str:

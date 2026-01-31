@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import sys
+from pathlib import Path
 from typing import Any
 
 from mcp.server import Server
@@ -103,6 +104,10 @@ from litrev_mcp.tools.argument_map_search import (
     embed_propositions,
     search_argument_map,
     expand_argument_map,
+)
+from litrev_mcp.tools.mathpix import (
+    convert_pdf_to_markdown,
+    MathpixError,
 )
 
 # Configure logging
@@ -637,6 +642,11 @@ async def list_tools() -> list[Tool]:
                         "minimum": 1,
                         "maximum": 20,
                     },
+                    "use_mathpix": {
+                        "type": "boolean",
+                        "description": "Use Mathpix for PDF text extraction instead of pdfplumber. Better for math, tables, and scientific content. Falls back to pdfplumber on error. Requires MATHPIX_APP_ID and MATHPIX_APP_KEY. (default false)",
+                        "default": False,
+                    },
                 },
                 "required": ["project"],
             },
@@ -722,6 +732,30 @@ async def list_tools() -> list[Tool]:
                     },
                 },
                 "required": ["project"],
+            },
+        ),
+        # PDF Conversion tools
+        Tool(
+            name="convert_pdf",
+            description="Convert a PDF to markdown using Mathpix OCR. Handles large PDFs with automatic batching. Excellent for math, tables, and scientific content. Results are cached by file hash.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "pdf_path": {
+                        "type": "string",
+                        "description": "Path to the PDF file to convert",
+                    },
+                    "use_cache": {
+                        "type": "boolean",
+                        "description": "Use file-based caching to avoid re-converting (default true)",
+                        "default": True,
+                    },
+                    "page_ranges": {
+                        "type": "string",
+                        "description": "Optional page ranges to convert (e.g., '1-10,15-20'). If not specified, converts all pages with automatic batching.",
+                    },
+                },
+                "required": ["pdf_path"],
             },
         ),
         # Project Context tools
@@ -1530,8 +1564,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         result = await index_papers(
             project=arguments.get("project"),
             force_reindex=arguments.get("force_reindex", False),
-            show_progress=arguments.get("show_progress", True),
-            max_concurrent=arguments.get("max_concurrent", 5),
+            use_mathpix=arguments.get("use_mathpix", False),
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
@@ -1811,6 +1844,32 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             relationship_types=arguments.get("relationship_types"),
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "convert_pdf":
+        try:
+            pdf_path = Path(arguments["pdf_path"])
+            result = await convert_pdf_to_markdown(
+                filepath=pdf_path,
+                use_cache=arguments.get("use_cache", True),
+                page_ranges=arguments.get("page_ranges"),
+            )
+            return [TextContent(type="text", text=json.dumps(result, indent=2))]
+        except MathpixError as e:
+            return [TextContent(type="text", text=json.dumps({
+                "success": False,
+                "error": {
+                    "code": "MATHPIX_ERROR",
+                    "message": str(e),
+                }
+            }, indent=2))]
+        except Exception as e:
+            return [TextContent(type="text", text=json.dumps({
+                "success": False,
+                "error": {
+                    "code": "CONVERT_ERROR",
+                    "message": str(e),
+                }
+            }, indent=2))]
 
     if name == "restart_server":
         logger.info("Restarting MCP server...")
