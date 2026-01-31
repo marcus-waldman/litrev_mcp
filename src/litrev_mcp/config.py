@@ -243,7 +243,7 @@ def get_ncbi_api_key() -> Optional[str]:
 
 def get_semantic_scholar_api_key() -> Optional[str]:
     """Get the Semantic Scholar API key from environment (optional)."""
-    return get_env_var("SEMANTIC_SCHOLAR_API_KEY")
+    return get_env_var("SEMANTIC_SCHOLAR_API_KEY") or get_env_var("SEMANTICSCHOLAR_API")
 
 
 # Global config manager instance
