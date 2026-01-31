@@ -570,7 +570,7 @@ source ~/.bashrc  # or ~/.zshrc</code></pre>
                     <li><strong>Extract propositions</strong> — <code>extract_concepts</code> uses Claude Opus 4.5 to identify propositions, relationships, and evidence from each insight</li>
                     <li><strong>Review and add</strong> — Review the extracted data, then <code>add_propositions</code> to commit to the map</li>
                     <li><strong>Organize into topics</strong> — Use <code>create_topic</code> and <code>assign_proposition_topic</code> to group related propositions</li>
-                    <li><strong>Query by purpose</strong> — <code>query_propositions</code> ranks propositions by salience to your specific writing context</li>
+                    <li><strong>Search</strong> — <code>query_propositions</code> for keyword search, or <code>search_argument_map</code> for semantic GraphRAG search</li>
                     <li><strong>Find gaps</strong> — <code>find_argument_gaps</code> shows where you need more evidence</li>
                     <li><strong>Visualize</strong> — <code>visualize_argument_map</code> generates an interactive HTML graph</li>
                 </ol>
@@ -591,7 +591,7 @@ source ~/.bashrc  # or ~/.zshrc</code></pre>
                     <li><strong>Evidence</strong> — Citable claims linking propositions to specific insights and page numbers</li>
                     <li><strong>Epistemic tags</strong> — <code>insight</code> (grounded in your literature) vs <code>ai_knowledge</code> (from Claude, could be wrong)</li>
                     <li><strong>Issues</strong> — Track needed changes: needs_evidence, rephrase, wrong_topic, merge, split, delete, question</li>
-                    <li><strong>Salience</strong> — Query-time weighting by purpose/audience (e.g., "Methods section for epi journal")</li>
+                    <li><strong>Gaps</strong> — AI scaffolding propositions that lack grounded evidence from your literature</li>
                 </ul>
             </section>
 
@@ -918,7 +918,7 @@ source ~/.bashrc  # or ~/.zshrc</code></pre>
                         </tr>
                         <tr>
                             <td><code>update_proposition</code></td>
-                            <td>Modify a proposition's definition, salience, aliases, relationships, or evidence</td>
+                            <td>Modify a proposition's definition, aliases, relationships, or evidence</td>
                             <td><code>project</code>, <code>proposition_id</code>, <code>updates</code></td>
                         </tr>
                         <tr>
@@ -933,8 +933,8 @@ source ~/.bashrc  # or ~/.zshrc</code></pre>
                         </tr>
                         <tr>
                             <td><code>query_propositions</code></td>
-                            <td>Salience-weighted search — find propositions ranked by relevance to your query, weighted by purpose/audience context</td>
-                            <td><code>project</code>, <code>query</code>, <code>purpose</code> (opt), <code>audience</code> (opt)</td>
+                            <td>Keyword search — find propositions matching your query by keyword. For semantic search, use <code>search_argument_map</code></td>
+                            <td><code>project</code>, <code>query</code></td>
                         </tr>
                     </tbody>
                 </table>
@@ -989,13 +989,13 @@ source ~/.bashrc  # or ~/.zshrc</code></pre>
                     <tbody>
                         <tr>
                             <td><code>find_argument_gaps</code></td>
-                            <td>Identify salient AI knowledge propositions lacking grounded evidence, with search suggestions</td>
-                            <td><code>project</code>, <code>purpose</code> (opt), <code>audience</code> (opt), <code>min_salience</code> (opt)</td>
+                            <td>Find AI scaffolding propositions that lack grounded evidence, with search suggestions</td>
+                            <td><code>project</code></td>
                         </tr>
                         <tr>
                             <td><code>visualize_argument_map</code></td>
-                            <td>Interactive PyVis graph — color-coded nodes (green=grounded, yellow=scaffolding, red=gaps), sized by salience, with tooltips</td>
-                            <td><code>project</code>, <code>filter_source</code> (opt), <code>highlight_gaps</code> (opt), <code>show_salience</code> (opt)</td>
+                            <td>Interactive PyVis graph — color-coded nodes (green=grounded, yellow=scaffolding, red=gaps), sized by evidence count, with tooltips</td>
+                            <td><code>project</code>, <code>filter_source</code> (opt), <code>highlight_gaps</code> (opt)</td>
                         </tr>
                     </tbody>
                 </table>

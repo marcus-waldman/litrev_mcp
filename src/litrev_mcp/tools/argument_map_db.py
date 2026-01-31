@@ -19,7 +19,7 @@ from datetime import datetime
 from litrev_mcp.tools.rag_db import get_connection, get_embedding_dimensions
 
 
-def init_concept_map_schema():
+def init_argument_map_schema():
     """Initialize argument map tables in the existing DuckDB database."""
     conn = get_connection()
 
@@ -511,7 +511,7 @@ def get_project_propositions(
 
 
 # ============================================================================
-# CRUD Operations: Project Concepts
+# CRUD Operations: Project Propositions
 # ============================================================================
 
 def link_proposition_to_project(
@@ -956,7 +956,7 @@ def find_gaps(
     ]
 
 
-def get_concept_map_stats(project: Optional[str] = None) -> dict:
+def get_argument_map_stats(project: Optional[str] = None) -> dict:
     """Get statistics about the argument map."""
     conn = get_connection()
 
@@ -1009,7 +1009,7 @@ def get_concept_map_stats(project: Optional[str] = None) -> dict:
         relationships = conn.execute("SELECT COUNT(*) FROM proposition_relationships").fetchone()[0]
 
     return {
-        'total_concepts': total,
+        'total_propositions': total,
         'grounded': grounded,
         'ai_scaffolding': scaffolding,
         'gaps': gaps,

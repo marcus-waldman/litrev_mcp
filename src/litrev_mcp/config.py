@@ -56,12 +56,11 @@ class WorkflowConfig(BaseModel):
     auto_generate_templates: bool = True
 
 
-class ConceptMapConfig(BaseModel):
-    """Configuration for concept map feature."""
+class ArgumentMapConfig(BaseModel):
+    """Configuration for argument map feature."""
     enabled: bool = True
     auto_extract: bool = True
     show_scaffolding: bool = True
-    salience_threshold: float = 0.3
 
 
 class Config(BaseModel):
@@ -72,7 +71,7 @@ class Config(BaseModel):
     better_bibtex: BetterBibTexConfig = Field(default_factory=BetterBibTexConfig)
     rag: RAGConfig = Field(default_factory=RAGConfig)
     workflow: WorkflowConfig = Field(default_factory=WorkflowConfig)
-    concept_map: ConceptMapConfig = Field(default_factory=ConceptMapConfig)
+    argument_map: ArgumentMapConfig = Field(default_factory=ArgumentMapConfig)
 
 
 class ConfigManager:

@@ -1,12 +1,12 @@
 """
 Argument map tools for organizing literature knowledge.
 
-Provides tools for managing a 3-level argument map that tracks:
+Provides tools for managing an argument map that tracks:
 - Topics: high-level organizational themes
 - Propositions: arguable assertions (formerly 'concepts')
 - Evidence: citable support from literature
 - Relationships: argumentative and logical connections
-- Gaps: salient propositions lacking evidence
+- Gaps: ungrounded AI scaffolding propositions lacking evidence
 """
 
 from typing import Optional
@@ -16,7 +16,7 @@ import os
 from pathlib import Path
 
 from litrev_mcp.config import config_manager
-from litrev_mcp.tools import concept_map_db as db
+from litrev_mcp.tools import argument_map_db as db
 from litrev_mcp.tools.rag_db import checkpoint
 
 # Import Anthropic SDK for Opus
@@ -42,7 +42,7 @@ except ImportError:
 
 
 def _make_proposition_id(name: str) -> str:
-    """Generate a concept ID from the concept name."""
+    """Generate a proposition ID from the proposition name."""
     # Convert to lowercase, replace spaces/special chars with underscores
     proposition_id = re.sub(r'[^a-z0-9]+', '_', name.lower()).strip('_')
     return proposition_id
@@ -270,7 +270,7 @@ def add_propositions(
         Success status and summary of changes
     """
     # Initialize schema if needed
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
     added_topics = []
     added_propositions = []
@@ -311,7 +311,7 @@ def add_propositions(
         else:
             updated_propositions.append(name)
 
-        # Link to project (no salience - computed dynamically)
+        # Link to project
         db.link_proposition_to_project(project, proposition_id)
 
         # Link to topic if suggested
@@ -379,7 +379,7 @@ def create_topic(
     Returns:
         Created topic details
     """
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
     topic_id = _make_proposition_id(name)
     topic = db.upsert_topic(topic_id, name, description, project)
@@ -403,7 +403,7 @@ def list_topics(project: str) -> dict:
     Returns:
         List of topics with proposition counts
     """
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
     topics = db.get_project_topics(project)
 
@@ -434,7 +434,7 @@ def update_topic(
     Returns:
         Updated topic details
     """
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
     # Get existing topic
     topic = db.get_topic(topic_id)
@@ -476,7 +476,7 @@ def delete_topic(topic_id: str, confirm: bool = False) -> dict:
             'error': 'Must set confirm=True to delete a topic. This will unlink all propositions from this topic.'
         }
 
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
     topic = db.get_topic(topic_id)
     if not topic:
@@ -512,7 +512,7 @@ def assign_proposition_topic(
     Returns:
         Success status
     """
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
     db.link_proposition_to_topic(proposition_id, topic_id, is_primary)
 
@@ -530,7 +530,7 @@ def show_argument_map(
     filter_source: Optional[str] = None,
 ) -> dict:
     """
-    Display the concept map for a project.
+    Display the argument map for a project.
 
     Args:
         project: Project code
@@ -538,48 +538,48 @@ def show_argument_map(
         filter_source: Optional filter ('insight', 'ai_knowledge', or None for all)
 
     Returns:
-        Text representation of the concept map
+        Text representation of the argument map
     """
     # Initialize schema if needed
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
     # Get stats
-    stats = db.get_concept_map_stats(project)
+    stats = db.get_argument_map_stats(project)
 
-    # Get concepts
-    concepts = db.get_project_propositions(project, filter_source=filter_source)
+    # Get propositions
+    propositions = db.get_project_propositions(project, filter_source=filter_source)
 
     # Build output
     output = []
-    output.append(f"=== Concept Map: {project} ===\n")
-    output.append(f"Total concepts: {stats['total_concepts']}")
+    output.append(f"=== Argument Map: {project} ===\n")
+    output.append(f"Total propositions: {stats['total_propositions']}")
     output.append(f"  Grounded (from insights): {stats['grounded']}")
     output.append(f"  AI scaffolding (with evidence): {stats['ai_scaffolding']}")
     output.append(f"  Gaps (AI knowledge, no evidence): {stats['gaps']}")
     output.append(f"Relationships: {stats['relationships']}\n")
 
     if format == 'detailed':
-        output.append("\n--- Concepts ---\n")
-        for concept in concepts:
-            source_icon = "✓" if concept['source'] == 'insight' else "⚠"
-            evidence_icon = f"[{concept['evidence_count']} evidence]" if concept['evidence_count'] > 0 else "[no evidence]"
+        output.append("\n--- Propositions ---\n")
+        for proposition in propositions:
+            source_icon = "✓" if proposition['source'] == 'insight' else "⚠"
+            evidence_icon = f"[{proposition['evidence_count']} evidence]" if proposition['evidence_count'] > 0 else "[no evidence]"
 
-            output.append(f"{source_icon} {concept['name']} {evidence_icon}")
-            if concept['definition']:
-                output.append(f"    {concept['definition'][:100]}...")
+            output.append(f"{source_icon} {proposition['name']} {evidence_icon}")
+            if proposition['definition']:
+                output.append(f"    {proposition['definition'][:100]}...")
 
             # Get relationships
-            relationships = db.get_relationships(proposition_id=concept['id'])
+            relationships = db.get_relationships(proposition_id=proposition['id'])
             if relationships:
                 for rel in relationships:
-                    if rel['from_proposition_id'] == concept['id']:
+                    if rel['from_proposition_id'] == proposition['id']:
                         output.append(f"    -> {rel['relationship_type']}: {rel['to_name']}")
                     else:
                         output.append(f"    <- {rel['relationship_type']}: {rel['from_name']}")
 
             # Get evidence
-            if concept['evidence_count'] > 0:
-                evidence_list = db.get_evidence(concept['id'], project)
+            if proposition['evidence_count'] > 0:
+                evidence_list = db.get_evidence(proposition['id'], project)
                 for ev in evidence_list[:3]:  # Show first 3
                     output.append(f"    Evidence [{ev['insight_id']}]: {ev['claim'][:80]}...")
 
@@ -599,26 +599,26 @@ def update_proposition(
     updates: dict,
 ) -> dict:
     """
-    Update a concept's attributes.
+    Update a proposition's attributes.
 
     Args:
         project: Project code
-        proposition_id: The concept ID to update
-        updates: Dict with optional keys: definition, salience_weight, add_alias,
+        proposition_id: The proposition ID to update
+        updates: Dict with optional keys: definition, add_alias,
                  add_relationship, add_evidence
 
     Returns:
-        Success status and updated concept
+        Success status and updated proposition
     """
     # Initialize schema if needed
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
-    # Check concept exists
-    concept = db.get_proposition(proposition_id)
-    if not concept:
+    # Check proposition exists
+    proposition = db.get_proposition(proposition_id)
+    if not proposition:
         return {
             'success': False,
-            'error': f"Concept '{proposition_id}' not found"
+            'error': f"Proposition '{proposition_id}' not found"
         }
 
     changes = []
@@ -627,16 +627,11 @@ def update_proposition(
     if 'definition' in updates:
         db.upsert_proposition(
             proposition_id,
-            concept['name'],
+            proposition['name'],
             updates['definition'],
-            concept['source']
+            proposition['source']
         )
         changes.append("Updated definition")
-
-    # Update salience
-    if 'salience_weight' in updates:
-        db.update_proposition_salience(project, proposition_id, updates['salience_weight'])
-        changes.append(f"Updated salience to {updates['salience_weight']}")
 
     # Add alias
     if 'add_alias' in updates:
@@ -668,14 +663,14 @@ def update_proposition(
         )
         changes.append(f"Added evidence from {ev['insight_id']}")
 
-    # Get updated concept
-    updated_concept = db.get_proposition(proposition_id)
+    # Get updated proposition
+    updated_proposition = db.get_proposition(proposition_id)
 
     return {
         'success': True,
         'proposition_id': proposition_id,
         'changes': changes,
-        'concept': updated_concept
+        'proposition': updated_proposition
     }
 
 
@@ -685,11 +680,11 @@ def delete_proposition(
     confirm: bool = False,
 ) -> dict:
     """
-    Delete a concept from the project or globally.
+    Delete a proposition from the project or globally.
 
     Args:
         project: Project code
-        proposition_id: The concept ID to delete
+        proposition_id: The proposition ID to delete
         confirm: Must be True to proceed (safety check)
 
     Returns:
@@ -698,28 +693,28 @@ def delete_proposition(
     if not confirm:
         return {
             'success': False,
-            'error': "Must set confirm=True to delete a concept. This action cannot be undone."
+            'error': "Must set confirm=True to delete a proposition. This action cannot be undone."
         }
 
     # Initialize schema if needed
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
-    # Check concept exists
-    concept = db.get_proposition(proposition_id)
-    if not concept:
+    # Check proposition exists
+    proposition = db.get_proposition(proposition_id)
+    if not proposition:
         return {
             'success': False,
-            'error': f"Concept '{proposition_id}' not found"
+            'error': f"Proposition '{proposition_id}' not found"
         }
 
-    # Check if concept is used in other projects
-    all_concepts = db.get_project_propositions(project)
-    concept_in_project = any(c['id'] == proposition_id for c in all_concepts)
+    # Check if proposition is used in this project
+    all_propositions = db.get_project_propositions(project)
+    prop_in_project = any(c['id'] == proposition_id for c in all_propositions)
 
-    if not concept_in_project:
+    if not prop_in_project:
         return {
             'success': False,
-            'error': f"Concept '{proposition_id}' is not linked to project '{project}'"
+            'error': f"Proposition '{proposition_id}' is not linked to project '{project}'"
         }
 
     # Remove from this project only (don't delete globally)
@@ -728,8 +723,8 @@ def delete_proposition(
     return {
         'success': True,
         'proposition_id': proposition_id,
-        'message': f"Concept '{concept['name']}' removed from project {project}. "
-                   "Global concept and relationships preserved."
+        'message': f"Proposition '{proposition['name']}' removed from project {project}. "
+                   "Global proposition and relationships preserved."
     }
 
 
@@ -748,7 +743,7 @@ def list_conflicts(
         List of conflicts
     """
     # Initialize schema if needed
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
     conflicts = db.get_conflicts(project, status)
 
@@ -778,7 +773,7 @@ def resolve_conflict(
         Success status
     """
     # Initialize schema if needed
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
     valid_resolutions = ['ai_correct', 'evidence_correct', 'both_valid']
     if resolution not in valid_resolutions:
@@ -816,7 +811,7 @@ def delete_relationship(
         Success status
     """
     # Initialize schema if needed
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
     from_id = _make_proposition_id(from_proposition)
     to_id = _make_proposition_id(to_proposition)
@@ -855,144 +850,123 @@ def delete_relationship(
 def query_propositions(
     project: str,
     query: str,
-    purpose: Optional[str] = None,
-    audience: Optional[str] = None,
     max_results: int = 10,
 ) -> dict:
     """
-    Query the concept map with salience weighting.
-
-    Uses hybrid approach:
-    1. Embedding similarity for initial ranking
-    2. Considers purpose/audience context for salience
-    3. Returns concepts ordered by relevance
+    Search the argument map by keyword. Returns propositions matching the query,
+    ranked by relevance. For semantic search, use search_argument_map instead.
 
     Args:
         project: Project code
-        query: Natural language query
-        purpose: Context for salience weighting (e.g., "Methods section for journal")
-        audience: Target audience (e.g., "Reviewers familiar with regression")
+        query: Keyword query to match against proposition names and definitions
         max_results: Maximum results to return
 
     Returns:
-        Concepts ranked by salience with evidence
+        Propositions ranked by relevance with evidence
     """
     # Initialize schema if needed
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
-    # Get all concepts for project
-    concepts = db.get_project_propositions(project)
+    # Get all propositions for project
+    propositions = db.get_project_propositions(project)
 
-    if not concepts:
+    if not propositions:
         return {
             'success': True,
             'project': project,
             'query': query,
             'results': [],
-            'message': "No concepts found in concept map for this project"
+            'message': "No propositions found in argument map for this project"
         }
 
-    # Simple text matching for now (can be enhanced with embeddings later)
-    # Score based on query match in name/definition
-    scored_concepts = []
+    # Simple text matching (for semantic search, use search_argument_map)
+    scored_propositions = []
     query_lower = query.lower()
 
-    for concept in concepts:
-        # Start with base salience (dynamically computed, not stored)
-        # Higher base for grounded concepts (from insights)
-        score = 0.5 if concept['source'] == 'insight' or concept['evidence_count'] > 0 else 0.3
+    for proposition in propositions:
+        # Base score: higher for grounded propositions
+        score = 0.5 if proposition['source'] == 'insight' or proposition['evidence_count'] > 0 else 0.3
 
         # Boost if query matches name or definition
-        if query_lower in concept['name'].lower():
+        if query_lower in proposition['name'].lower():
             score += 0.3
-        if concept['definition'] and query_lower in concept['definition'].lower():
+        if proposition['definition'] and query_lower in proposition['definition'].lower():
             score += 0.2
 
-        # Get evidence
-        evidence_list = db.get_evidence(concept['id'], project)
+        # Skip if no match at all
+        if score <= 0.5 and proposition['source'] != 'insight' and proposition['evidence_count'] == 0:
+            if query_lower not in proposition['name'].lower() and (not proposition['definition'] or query_lower not in proposition['definition'].lower()):
+                continue
 
-        scored_concepts.append({
-            'concept': concept['name'],
-            'proposition_id': concept['id'],
-            'definition': concept['definition'],
-            'salience': round(score, 3),
-            'grounded': concept['source'] == 'insight' or concept['evidence_count'] > 0,
+        # Get evidence
+        evidence_list = db.get_evidence(proposition['id'], project)
+
+        scored_propositions.append({
+            'proposition': proposition['name'],
+            'proposition_id': proposition['id'],
+            'definition': proposition['definition'],
+            'relevance': round(score, 3),
+            'grounded': proposition['source'] == 'insight' or proposition['evidence_count'] > 0,
             'evidence': [
                 f"{ev['claim']} [{ev['insight_id']}]"
                 for ev in evidence_list[:3]
             ],
-            'source': concept['source'],
+            'source': proposition['source'],
         })
 
     # Sort by score
-    scored_concepts.sort(key=lambda x: x['salience'], reverse=True)
-
-    # Apply config threshold
-    config = config_manager.config
-    threshold = config.concept_map.salience_threshold
-    filtered = [c for c in scored_concepts if c['salience'] >= threshold]
+    scored_propositions.sort(key=lambda x: x['relevance'], reverse=True)
 
     return {
         'success': True,
         'project': project,
         'query': query,
-        'purpose': purpose,
-        'audience': audience,
-        'results': filtered[:max_results],
-        'total_matches': len(filtered),
-        'message': f"Found {len(filtered)} relevant concepts (showing top {min(len(filtered), max_results)})"
+        'results': scored_propositions[:max_results],
+        'total_matches': len(scored_propositions),
+        'message': f"Found {len(scored_propositions)} matching propositions (showing top {min(len(scored_propositions), max_results)}). For semantic search, use search_argument_map."
     }
 
 
 def find_argument_gaps(
     project: str,
-    purpose: Optional[str] = None,
-    audience: Optional[str] = None,
-    min_salience: float = 0.5,
 ) -> dict:
     """
-    Identify salient concepts that lack grounded evidence.
+    Find AI scaffolding propositions that lack grounded evidence from your literature.
 
-    Finds concepts that are:
-    - Important for the purpose (high salience)
-    - From AI knowledge without evidence (gaps)
+    Returns propositions sourced from AI general knowledge that have no
+    supporting evidence from your papers. These are candidates for literature
+    searches to ground them, or for removal if not relevant.
 
     Args:
         project: Project code
-        purpose: Context for salience (e.g., "Methods section")
-        audience: Target audience
-        min_salience: Minimum salience to consider (default 0.5)
 
     Returns:
-        List of gaps with suggestions
+        List of ungrounded propositions with suggestions
     """
     # Initialize schema if needed
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
-    # Get gaps from database (salience computed dynamically, not stored)
+    # Get gaps from database
     gaps = db.find_gaps(project)
 
     # Format results
     gap_list = []
     for gap in gaps:
         gap_list.append({
-            'concept': gap['name'],
+            'proposition': gap['name'],
             'proposition_id': gap['id'],
             'definition': gap['definition'],
-            'status': 'ai_scaffolding',
-            'why_salient': "AI scaffolding concept without grounded evidence from your literature.",
-            'suggestion': f"Search for papers about '{gap['name']}' to ground this concept in literature."
+            'status': 'ungrounded',
+            'reason': "AI scaffolding proposition without evidence from your literature.",
+            'suggestion': f"Search for papers about '{gap['name']}' to ground this proposition in literature."
         })
 
     return {
         'success': True,
         'project': project,
-        'purpose': purpose,
-        'audience': audience,
-        'min_salience': min_salience,
         'gaps': gap_list,
         'count': len(gap_list),
-        'message': f"Found {len(gap_list)} salient concepts without grounded evidence"
+        'message': f"Found {len(gap_list)} ungrounded AI scaffolding propositions"
     }
 
 
@@ -1001,14 +975,13 @@ def visualize_argument_map(
     output_path: Optional[str] = None,
     filter_source: Optional[str] = None,
     highlight_gaps: bool = True,
-    show_salience: bool = True,
 ) -> dict:
     """
     Generate interactive PyVis graph visualization of the argument map.
 
     Creates an HTML file with hierarchical interactive graph showing:
     - Topics as visual containers (grouped propositions)
-    - Propositions as nodes (colored by evidence status)
+    - Propositions as nodes (colored by evidence status, sized by evidence count)
     - Relationships as edges (within and across topics)
     - Click-to-expand evidence panels
     - Topic filter dropdown
@@ -1023,7 +996,6 @@ def visualize_argument_map(
         output_path: Optional custom output path (default: project/_argument_map.html)
         filter_source: Optional filter ('insight', 'ai_knowledge', or None for all)
         highlight_gaps: Whether to highlight gaps in red
-        show_salience: Whether to size nodes by salience
 
     Returns:
         Success status and output path
@@ -1035,7 +1007,7 @@ def visualize_argument_map(
         }
 
     # Initialize schema if needed
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
     # Get topics for the project
     topics = db.get_project_topics(project)
@@ -1137,14 +1109,8 @@ def visualize_argument_map(
             color = prop_colors['gap'] if highlight_gaps else prop_colors['partial']
             status = 'gap'
 
-        # Salience is computed dynamically; use default for visualization
-        salience = prop.get('salience', 0.5)
-
-        # Size by salience
-        if show_salience:
-            size = int(salience * 30 + 10)
-        else:
-            size = 20
+        # Size by evidence count: 0 evidence = 10, 1 = 20, 2 = 30, 3+ = 40
+        size = min(evidence_count * 10 + 10, 40)
 
         # Determine group (primary topic if exists)
         group = None
@@ -1162,7 +1128,7 @@ def visualize_argument_map(
         tooltip_lines = []
         tooltip_lines.append(f"<b>{prop['name']}</b>")
         tooltip_lines.append(f"<br>Status: {status}")
-        tooltip_lines.append(f"<br>Salience: {salience:.2f}")
+        tooltip_lines.append(f"<br>Evidence: {evidence_count}")
         if topic_names:
             tooltip_lines.append(f"<br>Topics: {', '.join(topic_names)}")
 
@@ -2118,7 +2084,7 @@ def visualize_argument_map(
         f.write(html_content)
 
     # Get stats
-    stats = db.get_concept_map_stats(project)
+    stats = db.get_argument_map_stats(project)
 
     return {
         'success': True,
@@ -2127,7 +2093,7 @@ def visualize_argument_map(
         'stats': stats,
         'topics_count': len(topics),
         'message': f"Interactive argument map saved to {output_path}. "
-                  f"Open in browser to explore {len(topics)} topics, {stats['total_concepts']} propositions, "
+                  f"Open in browser to explore {len(topics)} topics, {stats['total_propositions']} propositions, "
                   f"and {stats['relationships']} relationships. "
                   f"Click propositions to see evidence details. Use topic filter to focus."
     }
@@ -2233,7 +2199,7 @@ def add_proposition_issue(
         }
 
     # Initialize schema to check proposition exists
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
     # Get proposition info
     proposition = db.get_proposition(proposition_id)

@@ -1,50 +1,70 @@
 """
 Semantic Scholar search and citation analysis for litrev-mcp.
 
+Uses the R semanticscholar package via rpy2 to avoid Windows SSL issues.
+
 Provides:
 - Paper search
 - Backward snowball (references)
 - Forward snowball (citations)
 """
 
-from typing import Any, Optional
-from semanticscholar import SemanticScholar
+import os
+from typing import Any, Optional, List, Dict
+
+# Set up R environment
+os.environ['R_HOME'] = r'C:\Program Files\R\R-4.5.1'
+
+from rpy2 import robjects
+from rpy2.robjects import r
+
+# Load the semanticscholar R package
+try:
+    r('library(semanticscholar)')
+    _R_PACKAGE_LOADED = True
+except Exception as e:
+    _R_PACKAGE_LOADED = False
+    _R_LOAD_ERROR = str(e)
 
 from litrev_mcp.config import get_semantic_scholar_api_key
 
 
-def get_s2_client() -> SemanticScholar:
-    """Get Semantic Scholar client with optional API key."""
-    api_key = get_semantic_scholar_api_key()
-    if api_key:
-        return SemanticScholar(api_key=api_key)
-    return SemanticScholar()
+def _r_dataframe_to_dicts(df) -> List[Dict]:
+    """Convert R dataframe to list of Python dicts."""
+    if df is robjects.NULL or r('nrow')(df)[0] == 0:
+        return []
+
+    # Get column names
+    col_names = list(r('names')(df))
+    n_rows = r('nrow')(df)[0]
+
+    results = []
+    for i in range(n_rows):
+        row = {}
+        for col in col_names:
+            val = df.rx2(col)[i]
+            # Handle R NA values
+            if r('is.na')(val)[0]:
+                row[col] = None
+            else:
+                row[col] = val
+        results.append(row)
+
+    return results
 
 
-def format_s2_paper(paper) -> dict:
-    """Format a Semantic Scholar paper object to standard dict."""
-    # Extract authors
-    authors = []
-    if paper.authors:
-        for author in paper.authors:
-            if hasattr(author, 'name'):
-                authors.append(author.name)
-    authors_str = ", ".join(authors) if authors else "Unknown"
-
-    # Extract DOI
-    doi = None
-    if hasattr(paper, 'externalIds') and paper.externalIds:
-        doi = paper.externalIds.get('DOI')
-
+def format_s2_paper_from_r(paper_dict: dict) -> dict:
+    """Format a paper from R package to standard dict."""
+    # R package returns different field names, map them
     return {
-        "s2_id": paper.paperId,
-        "title": paper.title or "Untitled",
-        "authors": authors_str,
-        "year": paper.year,
-        "doi": doi,
-        "citation_count": paper.citationCount or 0,
-        "influential_citation_count": getattr(paper, 'influentialCitationCount', None),
-        "abstract": paper.abstract,
+        "s2_id": paper_dict.get('paperId') or paper_dict.get('paper_id'),
+        "title": paper_dict.get('title') or "Untitled",
+        "authors": paper_dict.get('authors') or "Unknown",
+        "year": paper_dict.get('year'),
+        "doi": paper_dict.get('externalIds.DOI'),  # R package may nest this
+        "citation_count": paper_dict.get('citationCount') or 0,
+        "influential_citation_count": paper_dict.get('influentialCitationCount'),
+        "abstract": paper_dict.get('abstract'),
     }
 
 
@@ -53,7 +73,7 @@ async def semantic_scholar_search(
     max_results: int = 10,
 ) -> dict[str, Any]:
     """
-    Search Semantic Scholar.
+    Search Semantic Scholar using R package.
 
     Args:
         query: Search query
@@ -62,15 +82,42 @@ async def semantic_scholar_search(
     Returns:
         Dictionary with search results including S2 IDs and citation counts.
     """
+    if not _R_PACKAGE_LOADED:
+        return {
+            "success": False,
+            "error": {
+                "code": "R_PACKAGE_NOT_LOADED",
+                "message": f"R semanticscholar package failed to load: {_R_LOAD_ERROR}",
+            }
+        }
+
     try:
         max_results = min(max_results, 100)
 
-        s2 = get_s2_client()
-        results = s2.search_paper(query, limit=max_results)
+        # Call R function - this may raise an R error if rate limited
+        s2_search = r['S2_search_papers']
+        try:
+            r_result = s2_search(query, limit=max_results)
+        except Exception as r_err:
+            # R function raised an error (likely rate limit)
+            err_msg = str(r_err)
+            if '429' in err_msg or 'Too Many Requests' in err_msg:
+                return {
+                    "success": False,
+                    "error": {
+                        "code": "RATE_LIMITED",
+                        "message": "Semantic Scholar API rate limit exceeded. Please wait a few minutes and try again.",
+                    }
+                }
+            raise  # Re-raise if not rate limit
 
+        # Convert R dataframe to list of dicts
+        paper_dicts = _r_dataframe_to_dicts(r_result)
+
+        # Format papers
         papers = []
-        for paper in results:
-            papers.append(format_s2_paper(paper))
+        for paper_dict in paper_dicts:
+            papers.append(format_s2_paper_from_r(paper_dict))
 
         result = {
             "success": True,
@@ -111,7 +158,7 @@ async def semantic_scholar_references(
     max_results: int = 50,
 ) -> dict[str, Any]:
     """
-    Backward snowball: get papers cited BY a given paper.
+    Backward snowball: get papers cited BY a given paper using R package.
 
     Args:
         paper_id: DOI, S2 paper ID, or PMID (e.g., "10.1234/example", "PMID:12345678")
@@ -125,73 +172,70 @@ async def semantic_scholar_references(
         Semantic Scholar API no longer supports the isInfluential field
         (as of January 2025, GitHub issue #2).
     """
-    try:
-        s2 = get_s2_client()
-
-        # Get the paper with references
-        paper = s2.get_paper(
-            paper_id,
-            fields=[
-                'title', 'paperId', 'references', 'references.paperId',
-                'references.title', 'references.authors', 'references.year',
-                'references.externalIds', 'references.citationCount'
-                # Note: references.isInfluential removed due to API deprecation (GitHub #2)
-            ]
-        )
-
-        if not paper:
-            return {
-                "success": False,
-                "error": {
-                    "code": "SEMANTIC_SCHOLAR_NOT_FOUND",
-                    "message": f"Paper not found: {paper_id}",
-                }
+    if not _R_PACKAGE_LOADED:
+        return {
+            "success": False,
+            "error": {
+                "code": "R_PACKAGE_NOT_LOADED",
+                "message": f"R semanticscholar package failed to load: {_R_LOAD_ERROR}",
             }
-
-        # Format source paper
-        source_paper = {
-            "title": paper.title,
-            "s2_id": paper.paperId,
         }
 
-        # Get references
+    try:
+        # Call R function to get paper with references
+        s2_paper = r['S2_paper2']
+        try:
+            r_result = s2_paper(paper_id, details=robjects.StrVector(['references']), limit=max_results)
+        except Exception as r_err:
+            err_msg = str(r_err)
+            if '429' in err_msg or 'Too Many Requests' in err_msg:
+                return {
+                    "success": False,
+                    "error": {
+                        "code": "RATE_LIMITED",
+                        "message": "Semantic Scholar API rate limit exceeded. Please wait a few minutes and try again.",
+                    }
+                }
+            elif 'not found' in err_msg.lower():
+                return {
+                    "success": False,
+                    "error": {
+                        "code": "SEMANTIC_SCHOLAR_NOT_FOUND",
+                        "message": f"Paper not found: {paper_id}",
+                    }
+                }
+            raise
+
+        # R function returns a list with paper info and references dataframe
+        # Extract source paper info (first element of list typically)
+        paper_info = r_result.rx2(1)  # Get first list element
+        source_paper = {
+            "title": str(paper_info.rx2('title')[0]) if 'title' in list(r('names')(paper_info)) else "Unknown",
+            "s2_id": paper_id,
+        }
+
+        # Extract references dataframe (second element, if exists)
         references = []
-        if paper.references:
-            for ref in paper.references[:max_results]:
-                if ref:
-                    # Extract DOI
-                    doi = None
-                    if hasattr(ref, 'externalIds') and ref.externalIds:
-                        doi = ref.externalIds.get('DOI')
+        if len(r_result) > 1:
+            refs_df = r_result.rx2(2)  # Get references dataframe
+            ref_dicts = _r_dataframe_to_dicts(refs_df)
 
-                    # Extract authors
-                    authors = []
-                    if hasattr(ref, 'authors') and ref.authors:
-                        for author in ref.authors:
-                            if hasattr(author, 'name'):
-                                authors.append(author.name)
-                    authors_str = ", ".join(authors) if authors else "Unknown"
-
-                    # Check if influential
-                    is_influential = False
-                    if hasattr(ref, 'isInfluential'):
-                        is_influential = ref.isInfluential
-
-                    references.append({
-                        "s2_id": ref.paperId,
-                        "title": ref.title or "Untitled",
-                        "authors": authors_str,
-                        "year": ref.year,
-                        "doi": doi,
-                        "citation_count": ref.citationCount or 0,
-                        "is_influential": is_influential,
-                    })
+            for ref_dict in ref_dicts:
+                references.append({
+                    "s2_id": ref_dict.get('paperId'),
+                    "title": ref_dict.get('title') or "Untitled",
+                    "authors": ref_dict.get('authors') or "Unknown",
+                    "year": ref_dict.get('year'),
+                    "doi": ref_dict.get('externalIds.DOI'),
+                    "citation_count": ref_dict.get('citationCount') or 0,
+                    "is_influential": False,  # R package doesn't provide this
+                })
 
         result = {
             "success": True,
             "source": "Semantic Scholar",
             "source_paper": source_paper,
-            "reference_count": len(paper.references) if paper.references else 0,
+            "reference_count": len(references),
             "references": references,
         }
 
@@ -226,7 +270,7 @@ async def semantic_scholar_citations(
     max_results: int = 50,
 ) -> dict[str, Any]:
     """
-    Forward snowball: get papers that CITE a given paper.
+    Forward snowball: get papers that CITE a given paper using R package.
 
     Args:
         paper_id: DOI, S2 paper ID, or PMID (e.g., "10.1234/example", "PMID:12345678")

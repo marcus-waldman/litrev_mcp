@@ -17,7 +17,7 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 - Semantic search over your PDFs (DuckDB + OpenAI embeddings)
 - **Argument Map (beta)** - Build a knowledge graph from your literature with propositions, relationships, evidence, and topics
 - **GraphRAG Search (beta)** - Semantic search over your argument map with LLM-judged graph traversal
-- AI-powered extraction, salience-weighted querying, gap detection, and interactive visualization
+- AI-powered extraction, keyword and GraphRAG search, gap detection, and interactive visualization
 - Issue tracking for argument map maintenance
 - Project context for tailored responses (goal, audience, style)
 - Claude-powered synthesis with coverage assessment
@@ -94,10 +94,10 @@ Build a living knowledge graph from your literature. The argument map organizes 
 - `extract_concepts` - **AI extraction with Claude Opus 4.5** - Automatically extracts propositions, topics, relationships, and evidence from saved insights
 - `add_propositions` - Add propositions, topics, relationships, and evidence to the map (after extraction or manual entry)
 - `show_argument_map` - View argument map structure with statistics and details
-- `update_proposition` - Modify definitions, salience, relationships, or evidence
+- `update_proposition` - Modify definitions, relationships, or evidence
 - `delete_proposition` - Remove propositions from project
 - `delete_relationship` - Delete a specific relationship between propositions
-- `query_propositions` - **Salience-weighted search** - Find propositions relevant to your query, ranked by importance to your purpose (e.g., "Methods section for epi journal")
+- `query_propositions` - **Keyword search** - Find propositions matching your query by keyword. For semantic search, use `search_argument_map`
 
 #### Topics (5 tools):
 Organize propositions into high-level themes (e.g., "Measurement Error Problem", "Bayesian Estimation"):
@@ -105,8 +105,8 @@ Organize propositions into high-level themes (e.g., "Measurement Error Problem",
 - `assign_proposition_topic` - Link propositions to topics (primary or secondary)
 
 #### Discovery & Visualization (2 tools):
-- `find_argument_gaps` - **Gap detection** - Identify salient AI knowledge propositions that lack grounded evidence, with suggestions for literature searches
-- `visualize_argument_map` - **Interactive PyVis graph** - Generate HTML visualization with color coding (green=grounded, yellow=scaffolding, red=gaps), node size by salience, rich tooltips, and directed edges
+- `find_argument_gaps` - **Gap detection** - Identify AI scaffolding propositions that lack grounded evidence, with suggestions for literature searches
+- `visualize_argument_map` - **Interactive PyVis graph** - Generate HTML visualization with color coding (green=grounded, yellow=scaffolding, red=gaps), node size by evidence count, rich tooltips, and directed edges
 
 #### Conflicts & Issues (6 tools):
 - `list_conflicts` / `resolve_conflict` - View and resolve contradictions between AI scaffolding and grounded evidence
@@ -117,11 +117,6 @@ Semantic search over your argument map with intelligent graph traversal — inst
 - `embed_propositions` - Generate embeddings for propositions (run once, then incrementally)
 - `search_argument_map` - **Semantic search + LLM-judged traversal** - Find propositions similar to your query via vector similarity, then Claude Sonnet decides how deep and which relationship types to follow for subgraph expansion
 - `expand_argument_map` - Manually expand from specific propositions along relationships (no LLM, direct control)
-
-**Three-Layer Architecture:**
-1. **Argument Map** (grounded propositions from your literature)
-2. **Salience Map** (weighted by purpose/audience - computed at query time)
-3. **AI General Knowledge** (structural scaffolding to identify gaps)
 
 **Database**: 10 tables in `literature.duckdb` — RAG (papers, chunks, rag_metadata) + Argument Map (propositions, aliases, project_propositions, relationships, evidence, conflicts, proposition_embeddings)
 

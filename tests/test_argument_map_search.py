@@ -296,7 +296,7 @@ class TestSearchArgumentMap:
     def test_no_embeddings_error(self):
         """Should return clear error when no embeddings exist."""
         with patch('litrev_mcp.tools.argument_map_search.db') as mock_db:
-            mock_db.init_concept_map_schema.return_value = None
+            mock_db.init_argument_map_schema.return_value = None
             mock_db.get_embedding_status.return_value = {
                 'total_propositions': 5,
                 'embedded': 0,
@@ -313,7 +313,7 @@ class TestSearchArgumentMap:
     def test_no_similar_results(self):
         """Should return empty subgraph gracefully."""
         with patch('litrev_mcp.tools.argument_map_search.db') as mock_db:
-            mock_db.init_concept_map_schema.return_value = None
+            mock_db.init_argument_map_schema.return_value = None
             mock_db.get_embedding_status.return_value = {
                 'total_propositions': 5,
                 'embedded': 5,
@@ -333,7 +333,7 @@ class TestSearchArgumentMap:
     def test_full_pipeline(self):
         """Test full search pipeline with mocked components."""
         with patch('litrev_mcp.tools.argument_map_search.db') as mock_db:
-            mock_db.init_concept_map_schema.return_value = None
+            mock_db.init_argument_map_schema.return_value = None
             mock_db.get_embedding_status.return_value = {
                 'total_propositions': 10,
                 'embedded': 10,
@@ -382,7 +382,7 @@ class TestExpandArgumentMap:
     def test_invalid_ids(self):
         """Should return error when no valid IDs provided."""
         with patch('litrev_mcp.tools.argument_map_search.db') as mock_db:
-            mock_db.init_concept_map_schema.return_value = None
+            mock_db.init_argument_map_schema.return_value = None
             mock_db.proposition_exists.return_value = False
 
             result = expand_argument_map('test_project', ['nonexistent'])
@@ -393,7 +393,7 @@ class TestExpandArgumentMap:
     def test_valid_expansion(self):
         """Should expand from valid propositions."""
         with patch('litrev_mcp.tools.argument_map_search.db') as mock_db:
-            mock_db.init_concept_map_schema.return_value = None
+            mock_db.init_argument_map_schema.return_value = None
             mock_db.proposition_exists.return_value = True
             mock_db.get_proposition.return_value = {
                 'id': 'a', 'name': 'A', 'definition': 'Def A', 'source': 'insight',
@@ -417,7 +417,7 @@ class TestEmbedPropositions:
     def test_no_propositions(self):
         """Should handle empty project gracefully."""
         with patch('litrev_mcp.tools.argument_map_search.db') as mock_db:
-            mock_db.init_concept_map_schema.return_value = None
+            mock_db.init_argument_map_schema.return_value = None
             mock_db.get_project_propositions.return_value = []
 
             result = embed_propositions('empty_project')
@@ -428,7 +428,7 @@ class TestEmbedPropositions:
     def test_all_already_embedded(self):
         """Should skip already-embedded propositions."""
         with patch('litrev_mcp.tools.argument_map_search.db') as mock_db:
-            mock_db.init_concept_map_schema.return_value = None
+            mock_db.init_argument_map_schema.return_value = None
             mock_db.get_project_propositions.return_value = [
                 {'id': 'a', 'name': 'A', 'definition': 'Def A', 'source': 'insight', 'evidence_count': 1},
             ]
@@ -445,7 +445,7 @@ class TestEmbedPropositions:
     def test_embeds_new_propositions(self):
         """Should embed propositions that are not yet embedded."""
         with patch('litrev_mcp.tools.argument_map_search.db') as mock_db:
-            mock_db.init_concept_map_schema.return_value = None
+            mock_db.init_argument_map_schema.return_value = None
             mock_db.get_project_propositions.return_value = [
                 {'id': 'a', 'name': 'A', 'definition': 'Def A', 'source': 'insight', 'evidence_count': 0},
             ]

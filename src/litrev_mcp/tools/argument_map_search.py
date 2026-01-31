@@ -13,7 +13,7 @@ from typing import Optional, Any
 
 from litrev_mcp.tools.rag_db import get_connection, checkpoint
 from litrev_mcp.tools.rag_embed import embed_texts, embed_query, EmbeddingError
-from litrev_mcp.tools import concept_map_db as db
+from litrev_mcp.tools import argument_map_db as db
 
 
 def _build_embedding_text(name: str, definition: Optional[str]) -> str:
@@ -39,7 +39,7 @@ def embed_propositions(
     propositions unless force=True. Re-embeds stale propositions whose
     name/definition changed since last embedding.
     """
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
     propositions = db.get_project_propositions(project)
     if not propositions:
@@ -347,7 +347,7 @@ def search_argument_map(
     5. Collect evidence for the subgraph
     6. Return focused subgraph with propositions, relationships, evidence
     """
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
     # Check embedding status
     status = db.get_embedding_status(project)
@@ -501,7 +501,7 @@ def expand_argument_map(
     Use this to explore further from propositions returned by search_argument_map.
     No LLM call or embedding search — directly follows relationships outward.
     """
-    db.init_concept_map_schema()
+    db.init_argument_map_schema()
 
     # Validate proposition IDs
     valid_ids = []

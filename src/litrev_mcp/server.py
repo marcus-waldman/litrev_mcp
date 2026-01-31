@@ -76,7 +76,7 @@ from litrev_mcp.tools.workflow import (
     save_search_strategy,
     get_workflow_status,
 )
-from litrev_mcp.tools.concept_map import (
+from litrev_mcp.tools.argument_map import (
     extract_concepts,
     add_propositions,
     create_topic,
@@ -1053,7 +1053,6 @@ async def list_tools() -> list[Tool]:
                         "description": "Updates to apply",
                         "properties": {
                             "definition": {"type": "string"},
-                            "salience_weight": {"type": "number"},
                             "add_alias": {"type": "string"},
                             "add_relationship": {
                                 "type": "object",
@@ -1111,14 +1110,12 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="query_propositions",
-            description="Query the argument map with dynamic salience weighting. Returns concepts ranked by relevance to the query, weighted by purpose and audience context.",
+            description="Search the argument map by keyword. Returns propositions matching the query, ranked by relevance. For semantic search, use search_argument_map instead.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "project": {"type": "string", "description": "Project code"},
-                    "query": {"type": "string", "description": "Natural language query"},
-                    "purpose": {"type": "string", "description": "Context for salience (e.g., 'Methods section for journal')"},
-                    "audience": {"type": "string", "description": "Target audience (e.g., 'Reviewers familiar with regression')"},
+                    "query": {"type": "string", "description": "Keyword query"},
                     "max_results": {"type": "integer", "default": 10, "description": "Maximum results to return"}
                 },
                 "required": ["project", "query"]
@@ -1126,33 +1123,29 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="find_argument_gaps",
-            description="Identify salient propositions that lack grounded evidence. Finds AI knowledge concepts with high salience but no supporting citations from your literature.",
+            description="Find AI scaffolding propositions that lack grounded evidence from your literature.",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "project": {"type": "string", "description": "Project code"},
-                    "purpose": {"type": "string", "description": "Context for salience (e.g., 'Methods section')"},
-                    "audience": {"type": "string", "description": "Target audience"},
-                    "min_salience": {"type": "number", "default": 0.5, "description": "Minimum salience to consider"}
+                    "project": {"type": "string", "description": "Project code"}
                 },
                 "required": ["project"]
             }
         ),
         Tool(
             name="visualize_argument_map",
-            description="Generate interactive PyVis graph visualization of the hierarchical argument map. Creates HTML file with color-coded nodes (green=grounded, yellow=scaffolding, red=gaps), sized by salience, with tooltips showing definitions and evidence.",
+            description="Generate interactive PyVis graph visualization of the hierarchical argument map. Creates HTML file with color-coded nodes (green=grounded, yellow=scaffolding, red=gaps), sized by evidence count, with tooltips showing definitions and evidence.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "project": {"type": "string", "description": "Project code"},
-                    "output_path": {"type": "string", "description": "Optional custom output path (default: project/_concept_map.html)"},
+                    "output_path": {"type": "string", "description": "Optional custom output path (default: project/_argument_map.html)"},
                     "filter_source": {
                         "type": "string",
                         "enum": ["all", "insight", "ai_knowledge"],
                         "description": "Filter by proposition source"
                     },
-                    "highlight_gaps": {"type": "boolean", "default": True, "description": "Highlight gaps in red"},
-                    "show_salience": {"type": "boolean", "default": True, "description": "Size nodes by salience"}
+                    "highlight_gaps": {"type": "boolean", "default": True, "description": "Highlight gaps in red"}
                 },
                 "required": ["project"]
             }
@@ -1633,7 +1626,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         result = await get_workflow_status(project=arguments["project"])
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
-    # Concept Map tools
+    # Argument Map tools
     if name == "extract_concepts":
         result = extract_concepts(
             project=arguments["project"],
@@ -1726,8 +1719,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         result = query_propositions(
             project=arguments["project"],
             query=arguments["query"],
-            purpose=arguments.get("purpose"),
-            audience=arguments.get("audience"),
             max_results=arguments.get("max_results", 10)
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
@@ -1735,9 +1726,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     if name == "find_argument_gaps":
         result = find_argument_gaps(
             project=arguments["project"],
-            purpose=arguments.get("purpose"),
-            audience=arguments.get("audience"),
-            min_salience=arguments.get("min_salience", 0.5)
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
@@ -1747,7 +1735,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             output_path=arguments.get("output_path"),
             filter_source=arguments.get("filter_source"),
             highlight_gaps=arguments.get("highlight_gaps", True),
-            show_salience=arguments.get("show_salience", True)
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
