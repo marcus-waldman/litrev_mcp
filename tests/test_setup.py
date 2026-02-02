@@ -26,34 +26,43 @@ class TestSetupCheck:
             with patch('litrev_mcp.tools.setup.config_manager') as mock_config:
                 with patch('litrev_mcp.tools.setup.get_zotero_api_key') as mock_key:
                     with patch('litrev_mcp.tools.setup.get_zotero_user_id') as mock_user:
-                        # Setup paths
-                        drive_path = Path(tmpdir) / "GoogleDrive"
-                        lit_path = drive_path / "Literature"
-                        config_path = lit_path / ".litrev" / "config.yaml"
+                        with patch('litrev_mcp.tools.setup.get_motherduck_token') as mock_md_token:
+                            with patch('litrev_mcp.tools.setup.duckdb') as mock_duckdb:
+                                # Setup paths
+                                drive_path = Path(tmpdir) / "GoogleDrive"
+                                lit_path = drive_path / "Literature"
+                                config_path = lit_path / ".litrev" / "config.yaml"
 
-                        drive_path.mkdir()
-                        lit_path.mkdir()
-                        config_path.parent.mkdir(parents=True)
-                        config_path.write_text("projects: {}")
+                                drive_path.mkdir()
+                                lit_path.mkdir()
+                                config_path.parent.mkdir(parents=True)
+                                config_path.write_text("projects: {}")
 
-                        mock_config.drive_path = drive_path
-                        mock_config.literature_path = lit_path
-                        mock_config.config_path = config_path
+                                mock_config.drive_path = drive_path
+                                mock_config.literature_path = lit_path
+                                mock_config.config_path = config_path
 
-                        # Setup config
-                        config = Config(projects={'TEST': ProjectConfig(name='Test', drive_folder='Literature/TEST')})
-                        mock_config.load.return_value = config
+                                # Setup config
+                                from litrev_mcp.config import DatabaseConfig
+                                config = Config(projects={'TEST': ProjectConfig(name='Test', drive_folder='Literature/TEST')})
+                                mock_config.load.return_value = config
+                                mock_config.config.database = DatabaseConfig()
 
-                        # Setup credentials
-                        mock_key.return_value = 'test_key'
-                        mock_user.return_value = '123456'
+                                # Setup credentials
+                                mock_key.return_value = 'test_key'
+                                mock_user.return_value = '123456'
+                                mock_md_token.return_value = 'test_md_token'
 
-                        result = await setup_check()
+                                # Mock MotherDuck connectivity test
+                                mock_conn = MagicMock()
+                                mock_duckdb.connect.return_value = mock_conn
 
-                        assert result['success'] is True
-                        assert result['status'] == 'ready'
-                        assert 'All systems configured' in result['message']
-                        assert len([i for i in result['issues'] if i['severity'] == 'error']) == 0
+                                result = await setup_check()
+
+                                assert result['success'] is True
+                                assert result['status'] == 'ready'
+                                assert 'All systems configured' in result['message']
+                                assert len([i for i in result['issues'] if i['severity'] == 'error']) == 0
 
     @pytest.mark.asyncio
     async def test_setup_check_missing_drive(self):
@@ -61,19 +70,21 @@ class TestSetupCheck:
         with patch('litrev_mcp.tools.setup.config_manager') as mock_config:
             with patch('litrev_mcp.tools.setup.get_zotero_api_key') as mock_key:
                 with patch('litrev_mcp.tools.setup.get_zotero_user_id') as mock_user:
-                    mock_config.drive_path = None
-                    mock_config.literature_path = None
-                    mock_config.config_path = None
+                    with patch('litrev_mcp.tools.setup.get_motherduck_token') as mock_md_token:
+                        mock_config.drive_path = None
+                        mock_config.literature_path = None
+                        mock_config.config_path = None
 
-                    mock_key.return_value = 'test_key'
-                    mock_user.return_value = '123456'
+                        mock_key.return_value = 'test_key'
+                        mock_user.return_value = '123456'
+                        mock_md_token.return_value = None
 
-                    result = await setup_check()
+                        result = await setup_check()
 
-                    assert result['success'] is True
-                    assert result['status'] == 'needs_setup'
-                    assert any(i['component'] == 'Google Drive' for i in result['issues'])
-                    assert any(i['severity'] == 'error' for i in result['issues'])
+                        assert result['success'] is True
+                        assert result['status'] == 'needs_setup'
+                        assert any(i['component'] == 'Google Drive' for i in result['issues'])
+                        assert any(i['severity'] == 'error' for i in result['issues'])
 
     @pytest.mark.asyncio
     async def test_setup_check_missing_zotero_credentials(self):
@@ -82,26 +93,28 @@ class TestSetupCheck:
             with patch('litrev_mcp.tools.setup.config_manager') as mock_config:
                 with patch('litrev_mcp.tools.setup.get_zotero_api_key') as mock_key:
                     with patch('litrev_mcp.tools.setup.get_zotero_user_id') as mock_user:
-                        # Setup paths
-                        drive_path = Path(tmpdir) / "GoogleDrive"
-                        lit_path = drive_path / "Literature"
-                        drive_path.mkdir()
-                        lit_path.mkdir()
+                        with patch('litrev_mcp.tools.setup.get_motherduck_token') as mock_md_token:
+                            # Setup paths
+                            drive_path = Path(tmpdir) / "GoogleDrive"
+                            lit_path = drive_path / "Literature"
+                            drive_path.mkdir()
+                            lit_path.mkdir()
 
-                        mock_config.drive_path = drive_path
-                        mock_config.literature_path = lit_path
-                        mock_config.config_path = None
+                            mock_config.drive_path = drive_path
+                            mock_config.literature_path = lit_path
+                            mock_config.config_path = None
 
-                        # Missing credentials
-                        mock_key.return_value = None
-                        mock_user.return_value = None
+                            # Missing credentials
+                            mock_key.return_value = None
+                            mock_user.return_value = None
+                            mock_md_token.return_value = None
 
-                        result = await setup_check()
+                            result = await setup_check()
 
-                        assert result['success'] is True
-                        assert result['status'] == 'needs_setup'
-                        assert any(i['component'] == 'Zotero' and 'API_KEY' in i['message'] for i in result['issues'])
-                        assert any(i['component'] == 'Zotero' and 'USER_ID' in i['message'] for i in result['issues'])
+                            assert result['success'] is True
+                            assert result['status'] == 'needs_setup'
+                            assert any(i['component'] == 'Zotero' and 'API_KEY' in i['message'] for i in result['issues'])
+                            assert any(i['component'] == 'Zotero' and 'USER_ID' in i['message'] for i in result['issues'])
 
     @pytest.mark.asyncio
     async def test_setup_check_with_warnings(self):
@@ -110,24 +123,33 @@ class TestSetupCheck:
             with patch('litrev_mcp.tools.setup.config_manager') as mock_config:
                 with patch('litrev_mcp.tools.setup.get_zotero_api_key') as mock_key:
                     with patch('litrev_mcp.tools.setup.get_zotero_user_id') as mock_user:
-                        # Setup paths (without Literature folder)
-                        drive_path = Path(tmpdir) / "GoogleDrive"
-                        lit_path = drive_path / "Literature"
-                        drive_path.mkdir()
-                        # Note: NOT creating lit_path
+                        with patch('litrev_mcp.tools.setup.get_motherduck_token') as mock_md_token:
+                            with patch('litrev_mcp.tools.setup.duckdb') as mock_duckdb:
+                                # Setup paths (without Literature folder)
+                                drive_path = Path(tmpdir) / "GoogleDrive"
+                                lit_path = drive_path / "Literature"
+                                drive_path.mkdir()
+                                # Note: NOT creating lit_path
 
-                        mock_config.drive_path = drive_path
-                        mock_config.literature_path = lit_path
-                        mock_config.config_path = None
+                                mock_config.drive_path = drive_path
+                                mock_config.literature_path = lit_path
+                                mock_config.config_path = None
 
-                        mock_key.return_value = 'test_key'
-                        mock_user.return_value = '123456'
+                                from litrev_mcp.config import DatabaseConfig
+                                mock_config.config.database = DatabaseConfig()
 
-                        result = await setup_check()
+                                mock_key.return_value = 'test_key'
+                                mock_user.return_value = '123456'
+                                mock_md_token.return_value = 'test_md_token'
 
-                        assert result['success'] is True
-                        # Should be ready_with_warnings since drive is there but lit folder missing
-                        assert any(i['severity'] == 'warning' for i in result['issues'])
+                                mock_conn = MagicMock()
+                                mock_duckdb.connect.return_value = mock_conn
+
+                                result = await setup_check()
+
+                                assert result['success'] is True
+                                # Should be ready_with_warnings since drive is there but lit folder missing
+                                assert any(i['severity'] == 'warning' for i in result['issues'])
 
 
 class TestSetupCreateProject:

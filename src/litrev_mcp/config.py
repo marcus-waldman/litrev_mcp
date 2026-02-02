@@ -63,6 +63,11 @@ class ArgumentMapConfig(BaseModel):
     show_scaffolding: bool = True
 
 
+class DatabaseConfig(BaseModel):
+    """Configuration for MotherDuck cloud database."""
+    motherduck_database: str = "litrev"
+
+
 class Config(BaseModel):
     """Main configuration model."""
     projects: dict[str, ProjectConfig] = Field(default_factory=dict)
@@ -72,6 +77,7 @@ class Config(BaseModel):
     rag: RAGConfig = Field(default_factory=RAGConfig)
     workflow: WorkflowConfig = Field(default_factory=WorkflowConfig)
     argument_map: ArgumentMapConfig = Field(default_factory=ArgumentMapConfig)
+    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
 
 
 class ConfigManager:
@@ -244,6 +250,11 @@ def get_ncbi_api_key() -> Optional[str]:
 def get_semantic_scholar_api_key() -> Optional[str]:
     """Get the Semantic Scholar API key from environment (optional)."""
     return get_env_var("SEMANTIC_SCHOLAR_API_KEY") or get_env_var("SEMANTICSCHOLAR_API")
+
+
+def get_motherduck_token() -> Optional[str]:
+    """Get the MotherDuck token from environment (required for database access)."""
+    return get_env_var("MOTHERDUCK_TOKEN")
 
 
 # Global config manager instance

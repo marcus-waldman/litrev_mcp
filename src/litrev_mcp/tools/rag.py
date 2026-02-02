@@ -628,7 +628,7 @@ from pathlib import Path
 
 def main():
     # Ensure environment variables are set
-    required_vars = ['ZOTERO_API_KEY', 'ZOTERO_USER_ID', 'OPENAI_API_KEY']
+    required_vars = ['ZOTERO_API_KEY', 'ZOTERO_USER_ID', 'OPENAI_API_KEY', 'MOTHERDUCK_TOKEN']
     missing = [v for v in required_vars if not os.environ.get(v)]
     if missing:
         print(f"ERROR: Missing environment variables: {{', '.join(missing)}}")

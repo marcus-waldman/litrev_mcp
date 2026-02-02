@@ -2,35 +2,37 @@
 DuckDB database module for RAG (Retrieval Augmented Generation).
 
 Handles schema initialization, connection management, and CRUD operations
-for the literature vector search database.
+for the literature vector search database via MotherDuck cloud.
 """
 
+import logging
 import duckdb
-from pathlib import Path
 from typing import Optional
 from datetime import datetime
 
-from litrev_mcp.config import config_manager
+from litrev_mcp.config import config_manager, get_motherduck_token
+
+logger = logging.getLogger(__name__)
 
 # Singleton connection
 _connection: Optional[duckdb.DuckDBPyConnection] = None
 
-
-def get_db_path() -> Path:
-    """Get path to DuckDB file in .litrev folder."""
-    lit_path = config_manager.literature_path
-    if not lit_path:
-        raise ValueError("Literature path not configured. Run setup_check first.")
-    return lit_path / ".litrev" / "literature.duckdb"
+# Track whether VSS extension is available (set during schema init)
+_vss_available: bool = False
 
 
 def get_connection() -> duckdb.DuckDBPyConnection:
-    """Get or create DuckDB connection (singleton)."""
+    """Get or create MotherDuck DuckDB connection (singleton)."""
     global _connection
     if _connection is None:
-        db_path = get_db_path()
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        _connection = duckdb.connect(str(db_path))
+        token = get_motherduck_token()
+        if not token:
+            raise ValueError(
+                "MOTHERDUCK_TOKEN environment variable is not set. "
+                "Get a token from https://app.motherduck.com/settings"
+            )
+        db_name = config_manager.config.database.motherduck_database
+        _connection = duckdb.connect(f"md:{db_name}?motherduck_token={token}")
         _init_schema(_connection)
     return _connection
 
@@ -44,10 +46,13 @@ def close_connection():
 
 
 def checkpoint():
-    """Force a WAL checkpoint to persist changes to the main database file."""
-    global _connection
-    if _connection is not None:
-        _connection.execute("CHECKPOINT")
+    """No-op for MotherDuck (persistence is handled automatically)."""
+    pass
+
+
+def is_vss_available() -> bool:
+    """Check whether the VSS extension is available on this connection."""
+    return _vss_available
 
 
 def get_embedding_dimensions() -> int:
@@ -57,12 +62,20 @@ def get_embedding_dimensions() -> int:
 
 def _init_schema(conn: duckdb.DuckDBPyConnection):
     """Initialize database schema if not exists."""
-    # Install and load VSS extension for vector search
-    conn.execute("INSTALL vss")
-    conn.execute("LOAD vss")
+    global _vss_available
 
-    # Enable experimental persistence for HNSW indexes
-    conn.execute("SET hnsw_enable_experimental_persistence = true")
+    # Try to install and load VSS extension for vector search
+    # MotherDuck may not support VSS; queries still work via brute-force cosine similarity
+    try:
+        conn.execute("INSTALL vss")
+        conn.execute("LOAD vss")
+        conn.execute("SET hnsw_enable_experimental_persistence = true")
+        _vss_available = True
+        logger.info("VSS extension loaded successfully")
+    except Exception as e:
+        _vss_available = False
+        logger.warning(f"VSS extension unavailable ({e}). HNSW indexes will be skipped; "
+                       "vector search will use brute-force cosine similarity.")
 
     dims = get_embedding_dimensions()
 
@@ -90,7 +103,7 @@ def _init_schema(conn: duckdb.DuckDBPyConnection):
         if stored_dims != dims:
             raise ValueError(
                 f"Database was created with {stored_dims} dimensions but config specifies {dims}. "
-                f"Either update config.yaml to use {stored_dims} dimensions, or delete the database "
+                f"Either update config.yaml to use {stored_dims} dimensions, or recreate the database "
                 f"and re-index with the new dimension setting."
             )
 
@@ -124,17 +137,18 @@ def _init_schema(conn: duckdb.DuckDBPyConnection):
         )
     """)
 
-    # Create HNSW index for fast vector similarity search
-    # Check if index exists first
-    try:
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS chunks_embedding_idx
-            ON chunks USING HNSW (embedding)
-            WITH (metric = 'cosine')
-        """)
-    except duckdb.CatalogException:
-        # Index already exists
-        pass
+    # Create HNSW index for fast vector similarity search (only if VSS available)
+    if _vss_available:
+        try:
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS chunks_embedding_idx
+                ON chunks USING HNSW (embedding)
+                WITH (metric = 'cosine')
+            """)
+        except (duckdb.CatalogException, Exception) as e:
+            logger.warning(f"Could not create HNSW index on chunks: {e}")
+    else:
+        logger.info("Skipping HNSW index on chunks (VSS not available)")
 
 
 def paper_exists(item_key: str) -> bool:

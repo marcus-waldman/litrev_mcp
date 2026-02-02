@@ -14,7 +14,7 @@ An MCP (Model Context Protocol) server that provides literature review tools to 
 - Full Zotero integration
 - Search APIs (PubMed, Semantic Scholar, ERIC)
 - Knowledge base system
-- Semantic search over your PDFs (DuckDB + OpenAI embeddings)
+- Semantic search over your PDFs (MotherDuck cloud DuckDB + OpenAI embeddings)
 - **Argument Map (beta)** - Build a knowledge graph from your literature with propositions, relationships, evidence, and topics
 - **GraphRAG Search (beta)** - Semantic search over your argument map with LLM-judged graph traversal
 - AI-powered extraction, keyword and GraphRAG search, gap detection, and interactive visualization
@@ -118,7 +118,7 @@ Semantic search over your argument map with intelligent graph traversal — inst
 - `search_argument_map` - **Semantic search + LLM-judged traversal** - Find propositions similar to your query via vector similarity, then Claude Sonnet decides how deep and which relationship types to follow for subgraph expansion
 - `expand_argument_map` - Manually expand from specific propositions along relationships (no LLM, direct control)
 
-**Database**: 10 tables in `literature.duckdb` — RAG (papers, chunks, rag_metadata) + Argument Map (propositions, aliases, project_propositions, relationships, evidence, conflicts, proposition_embeddings)
+**Database**: 10 tables in MotherDuck cloud (default database: `litrev`) — RAG (papers, chunks, rag_metadata) + Argument Map (propositions, aliases, project_propositions, relationships, evidence, conflicts, proposition_embeddings)
 
 **Epistemic Tagging**: Every proposition and relationship marked as either `insight` (from literature) or `ai_knowledge` (from Claude's general knowledge, could be wrong).
 
@@ -220,7 +220,8 @@ To find your Google Drive location, right-click the Google Drive icon in your sy
 **2. litrev-mcp will auto-create:**
 - `Literature/.litrev/` - Config folder
 - `Literature/.litrev/config.yaml` - Main config file
-- `Literature/.litrev/literature.duckdb` - RAG search database
+
+**Database:** All RAG and argument map data is stored in MotherDuck cloud (default database: `litrev`). The database is automatically created on first connection and syncs across all machines — no need to rebuild indexes when switching machines.
 
 **What syncs across machines:**
 | Item | Syncs? | Location |
@@ -228,10 +229,8 @@ To find your Google Drive location, right-click the Google Drive icon in your sy
 | Config file | ✅ Yes | `Literature/.litrev/config.yaml` |
 | PDFs | ✅ Yes | `Literature/{PROJECT}/` |
 | Notes | ✅ Yes | `Literature/{PROJECT}/_notes/` |
-| DuckDB index | ❌ No (per-machine) | `Literature/.litrev/literature.duckdb` |
+| Database | ✅ Yes (cloud) | MotherDuck (`litrev` database) |
 | Environment vars | ❌ No (per-machine) | `~/.bashrc` or `~/.zshrc` |
-
-**Important:** After setting up on a new machine, you'll need to run `index_papers` to rebuild the RAG index and `embed_propositions` to rebuild argument map search embeddings.
 
 ### Environment Variables Setup
 
@@ -241,6 +240,7 @@ To find your Google Drive location, right-click the Google Drive icon in your sy
 - `ZOTERO_API_KEY` - Your Zotero API key (from https://www.zotero.org/settings/keys)
 - `ZOTERO_USER_ID` - Your numeric Zotero User ID (from same page)
 - `OPENAI_API_KEY` - Your OpenAI API key (from https://platform.openai.com/api-keys)
+- `MOTHERDUCK_TOKEN` - Your MotherDuck token (from https://app.motherduck.com/settings)
 
 **Optional:**
 - `NCBI_API_KEY` - For higher PubMed rate limits
@@ -258,6 +258,7 @@ Open PowerShell as Administrator and run:
 [Environment]::SetEnvironmentVariable("ZOTERO_API_KEY", "your-api-key-here", "User")
 [Environment]::SetEnvironmentVariable("ZOTERO_USER_ID", "your-numeric-id", "User")
 [Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "your-openai-key", "User")
+[Environment]::SetEnvironmentVariable("MOTHERDUCK_TOKEN", "your-motherduck-token", "User")
 ```
 
 **Verify:**
@@ -286,6 +287,7 @@ export ZOTERO_API_KEY="your-api-key-here"
 export ZOTERO_USER_ID="your-numeric-id"
 export OPENAI_API_KEY="your-openai-key"  # if using RAG
 export ANTHROPIC_API_KEY="your-anthropic-key"  # if using argument map
+export MOTHERDUCK_TOKEN="your-motherduck-token"
 ```
 
 Then:
@@ -310,6 +312,7 @@ export ZOTERO_API_KEY="your-api-key-here"
 export ZOTERO_USER_ID="your-numeric-id"
 export OPENAI_API_KEY="your-openai-key"  # if using RAG
 export ANTHROPIC_API_KEY="your-anthropic-key"  # if using argument map
+export MOTHERDUCK_TOKEN="your-motherduck-token"
 ```
 
 Then:
@@ -491,8 +494,7 @@ Then restart Claude Code. Use `/init-litrev-context PROJECT` to collaboratively 
 Google Drive/
 └── Literature/
     ├── .litrev/
-    │   ├── config.yaml          # Project configuration
-    │   └── literature.duckdb    # RAG + argument map database (auto-created)
+    │   └── config.yaml          # Project configuration
     ├── MEAS-ERR/                # Project directory
     │   ├── _context.md          # Project context (goal, audience, style)
     │   ├── _concept_map.html    # Argument map visualization (auto-generated)
@@ -610,6 +612,7 @@ Already have litrev-mcp on one machine? Here's how to set up on another:
    export ZOTERO_API_KEY="your-key"
    export ZOTERO_USER_ID="your-id"
    export OPENAI_API_KEY="your-key"  # if using RAG
+   export MOTHERDUCK_TOKEN="your-token"
    source ~/.bashrc  # or ~/.zshrc
    ```
 
@@ -624,35 +627,28 @@ Already have litrev-mcp on one machine? Here's how to set up on another:
    > Use setup_check
    ```
 
-**7. Reindex papers** (DuckDB doesn't sync)
-   ```
-   > Use index_papers for project "PROJECT-CODE"
-   ```
-
-That's it! Your config, PDFs, and notes are already synced from the first machine.
+That's it! Your config, PDFs, notes, and database are already synced — no need to reindex.
 
 ## Database Management
 
-### DuckDB Database
+### MotherDuck Cloud Database
 
-**Location:** `Literature/.litrev/literature.duckdb`
+**Location:** MotherDuck cloud (default database name: `litrev`). Configure via `config.yaml`:
+```yaml
+database:
+  motherduck_database: litrev  # default
+```
 
 Stores both RAG search indexes (paper chunks + embeddings) and the argument map (propositions, relationships, evidence, topics, issues, proposition embeddings).
+
+**Cloud syncing:** The database is hosted on MotherDuck and automatically accessible from all machines — no need to rebuild indexes when switching computers.
 
 **Size:** Approximately:
 - 50 papers: ~10-20 MB
 - 200 papers: ~50-100 MB
 - 1000 papers: ~300-500 MB
 
-**Backup:** Not necessary - can be regenerated with `index_papers`
-
-**Syncing:** Database does NOT sync via Google Drive (too large, causes conflicts)
-- Each machine maintains its own index
-- After setting up a new machine, run `index_papers` to rebuild
-
-**Corruption:** If you suspect corruption:
-1. Delete `literature.duckdb`
-2. Run `index_papers` again
+**Backup:** MotherDuck handles persistence. Data can also be regenerated with `index_papers`.
 
 **Optimization:** For large collections (500+ papers), set:
 ```yaml
@@ -660,6 +656,11 @@ rag:
   embedding_dimensions: 512  # Instead of default 1536
 ```
 Reduces storage by ~66% with minimal quality impact.
+
+**Migration from local DuckDB:** If you have an existing local `literature.duckdb` file, use the migration script:
+```bash
+python scripts/migrate_to_motherduck.py path/to/Literature/.litrev/literature.duckdb
+```
 
 ## Upgrading
 

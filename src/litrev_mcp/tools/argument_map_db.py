@@ -12,11 +12,14 @@ Also handles:
 - Dynamic salience computation (no stored weights)
 """
 
+import logging
 import duckdb
 from typing import Optional, Any
 from datetime import datetime
 
-from litrev_mcp.tools.rag_db import get_connection, get_embedding_dimensions
+from litrev_mcp.tools.rag_db import get_connection, get_embedding_dimensions, is_vss_available
+
+logger = logging.getLogger(__name__)
 
 
 def init_argument_map_schema():
@@ -159,14 +162,17 @@ def init_argument_map_schema():
             FOREIGN KEY (proposition_id) REFERENCES propositions(id)
         )
     """)
-    try:
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS proposition_embeddings_idx
-            ON proposition_embeddings USING HNSW (embedding)
-            WITH (metric = 'cosine')
-        """)
-    except duckdb.CatalogException:
-        pass
+    if is_vss_available():
+        try:
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS proposition_embeddings_idx
+                ON proposition_embeddings USING HNSW (embedding)
+                WITH (metric = 'cosine')
+            """)
+        except (duckdb.CatalogException, Exception) as e:
+            logger.warning(f"Could not create HNSW index on proposition_embeddings: {e}")
+    else:
+        logger.info("Skipping HNSW index on proposition_embeddings (VSS not available)")
 
     # Create indexes for common queries
     _create_indexes(conn)

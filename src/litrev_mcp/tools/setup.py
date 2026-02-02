@@ -5,6 +5,7 @@ Helps users configure their environment and create projects.
 """
 
 import os
+import duckdb
 from typing import Any, Optional
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from litrev_mcp.config import (
     config_manager,
     get_zotero_api_key,
     get_zotero_user_id,
+    get_motherduck_token,
     Config,
     ProjectConfig,
 )
@@ -148,6 +150,35 @@ async def setup_check() -> dict[str, Any]:
         mathpix_id = os.environ.get("MATHPIX_APP_ID")
         mathpix_key = os.environ.get("MATHPIX_APP_KEY")
 
+        # Check MotherDuck token
+        motherduck_token = get_motherduck_token()
+        motherduck_status = 'not set'
+        if not motherduck_token:
+            issues.append({
+                'severity': 'error',
+                'component': 'MotherDuck',
+                'message': 'MOTHERDUCK_TOKEN not set',
+                'fix': 'Set MOTHERDUCK_TOKEN environment variable (get from https://app.motherduck.com/settings)',
+            })
+            all_good = False
+        else:
+            # Test MotherDuck connectivity
+            try:
+                db_name = config_manager.config.database.motherduck_database
+                test_conn = duckdb.connect(f"md:{db_name}?motherduck_token={motherduck_token}")
+                test_conn.execute("SELECT 1")
+                test_conn.close()
+                motherduck_status = f'connected (db: {db_name})'
+            except Exception as e:
+                issues.append({
+                    'severity': 'error',
+                    'component': 'MotherDuck',
+                    'message': f'MotherDuck connection failed: {str(e)}',
+                    'fix': 'Check your MOTHERDUCK_TOKEN is valid and you have internet access',
+                })
+                all_good = False
+                motherduck_status = 'connection failed'
+
         # Determine overall status
         if all_good and not warnings:
             status = 'ready'
@@ -172,6 +203,7 @@ async def setup_check() -> dict[str, Any]:
             'credentials': {
                 'zotero_api_key': 'set' if zotero_key else 'not set',
                 'zotero_user_id': zotero_user if zotero_user else 'not set',
+                'motherduck': motherduck_status,
                 'mathpix': 'set' if (mathpix_id and mathpix_key) else 'not set (optional)',
             },
         }
