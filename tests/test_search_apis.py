@@ -13,7 +13,7 @@ from litrev_mcp.tools.semantic_scholar import (
     semantic_scholar_search,
     semantic_scholar_references,
     semantic_scholar_citations,
-    format_s2_paper,
+    format_s2_paper_from_r,
 )
 from litrev_mcp.tools.eric import eric_search
 
@@ -110,25 +110,21 @@ class TestPubMedSearch:
 
 
 class TestSemanticScholarSearch:
-    """Tests for Semantic Scholar search functionality."""
+    """Tests for Semantic Scholar search functionality (R via rpy2)."""
 
-    def test_format_s2_paper(self):
-        """Test formatting S2 paper object."""
-        mock_paper = MagicMock()
-        mock_paper.paperId = 's2_id_123'
-        mock_paper.title = 'Test Paper'
-        mock_paper.year = 2020
-        mock_paper.citationCount = 42
-        mock_paper.abstract = 'Test abstract'
-        mock_paper.externalIds = {'DOI': '10.1234/test'}
+    def test_format_s2_paper_from_r(self):
+        """Test formatting S2 paper dict from R package."""
+        paper_dict = {
+            'paperId': 's2_id_123',
+            'title': 'Test Paper',
+            'year': 2020,
+            'citationCount': 42,
+            'abstract': 'Test abstract',
+            'externalIds.DOI': '10.1234/test',
+            'authors': 'John Smith, Jane Doe',
+        }
 
-        mock_author1 = MagicMock()
-        mock_author1.name = 'John Smith'
-        mock_author2 = MagicMock()
-        mock_author2.name = 'Jane Doe'
-        mock_paper.authors = [mock_author1, mock_author2]
-
-        result = format_s2_paper(mock_paper)
+        result = format_s2_paper_from_r(paper_dict)
 
         assert result['s2_id'] == 's2_id_123'
         assert result['title'] == 'Test Paper'
@@ -139,24 +135,41 @@ class TestSemanticScholarSearch:
 
     @pytest.mark.asyncio
     async def test_semantic_scholar_search_with_mock(self):
-        """Test Semantic Scholar search with mocked client."""
-        with patch('litrev_mcp.tools.semantic_scholar.get_s2_client') as mock_get_client:
-            mock_client = MagicMock()
-            mock_get_client.return_value = mock_client
+        """Test Semantic Scholar search with mocked R functions."""
+        import litrev_mcp.tools.semantic_scholar as s2_mod
 
-            # Create mock paper
-            mock_paper = MagicMock()
-            mock_paper.paperId = 's2_123'
-            mock_paper.title = 'Test Paper'
-            mock_paper.year = 2020
-            mock_paper.citationCount = 10
-            mock_paper.abstract = 'Abstract'
-            mock_paper.externalIds = {'DOI': '10.1234/test'}
-            mock_author = MagicMock()
-            mock_author.name = 'Test Author'
-            mock_paper.authors = [mock_author]
+        mock_paper_dicts = [
+            {
+                'paperId': 's2_123',
+                'title': 'Test Paper',
+                'year': 2020,
+                'citationCount': 10,
+                'abstract': 'Abstract',
+                'externalIds.DOI': '10.1234/test',
+                'authors': 'Test Author',
+            }
+        ]
 
-            mock_client.search_paper.return_value = [mock_paper]
+        # Mock the R result with rx2('data') returning a dataframe
+        mock_r_data = MagicMock()
+        mock_r_result = MagicMock()
+        mock_r_result.rx2 = MagicMock(return_value=mock_r_data)
+
+        # Mock the R function callable
+        mock_s2_search = MagicMock(return_value=mock_r_result)
+
+        # Build a dict-like mock for r['S2_search_papers']
+        r_dict = {'S2_search_papers': mock_s2_search}
+        mock_r = MagicMock()
+        mock_r.__getitem__ = lambda self, key: r_dict[key]
+
+        orig_loaded = s2_mod._R_PACKAGE_LOADED
+        orig_r = s2_mod.r
+        orig_df2d = s2_mod._r_dataframe_to_dicts
+        try:
+            s2_mod._R_PACKAGE_LOADED = True
+            s2_mod.r = mock_r
+            s2_mod._r_dataframe_to_dicts = MagicMock(return_value=mock_paper_dicts)
 
             result = await semantic_scholar_search(query="test query")
 
@@ -165,33 +178,77 @@ class TestSemanticScholarSearch:
             assert result['count'] == 1
             assert result['results'][0]['s2_id'] == 's2_123'
             assert result['results'][0]['title'] == 'Test Paper'
+        finally:
+            s2_mod._R_PACKAGE_LOADED = orig_loaded
+            s2_mod.r = orig_r
+            s2_mod._r_dataframe_to_dicts = orig_df2d
 
     @pytest.mark.asyncio
     async def test_semantic_scholar_references_with_mock(self):
-        """Test backward snowball with mocked client."""
-        with patch('litrev_mcp.tools.semantic_scholar.get_s2_client') as mock_get_client:
-            mock_client = MagicMock()
-            mock_get_client.return_value = mock_client
+        """Test backward snowball with mocked R functions."""
+        import litrev_mcp.tools.semantic_scholar as s2_mod
+        from rpy2 import robjects as real_robjects
 
-            # Create mock source paper
-            mock_source = MagicMock()
-            mock_source.paperId = 'source_123'
-            mock_source.title = 'Source Paper'
+        mock_ref_dicts = [
+            {
+                'paperId': 'ref_456',
+                'title': 'Referenced Paper',
+                'year': 2015,
+                'citationCount': 100,
+                'externalIds.DOI': '10.1234/ref',
+                'authors': 'Ref Author',
+            }
+        ]
 
-            # Create mock reference
-            mock_ref = MagicMock()
-            mock_ref.paperId = 'ref_456'
-            mock_ref.title = 'Referenced Paper'
-            mock_ref.year = 2015
-            mock_ref.citationCount = 100
-            mock_ref.externalIds = {'DOI': '10.1234/ref'}
-            mock_ref.isInfluential = True
-            mock_author = MagicMock()
-            mock_author.name = 'Ref Author'
-            mock_ref.authors = [mock_author]
+        # Build mock R result structure
+        # citingPaperInfo with title
+        mock_title_vec = MagicMock()
+        mock_title_vec.__getitem__ = lambda self, i: 'Source Paper'
 
-            mock_source.references = [mock_ref]
-            mock_client.get_paper.return_value = mock_source
+        mock_paper_info = MagicMock()
+        mock_paper_info.rx2 = lambda name: mock_title_vec if name == 'title' else MagicMock()
+
+        # data element with citedPaper sub-dataframe
+        mock_refs_df = MagicMock()
+        mock_data = MagicMock()
+        mock_data.rx2 = MagicMock(return_value=mock_refs_df)
+
+        def r_result_rx2(name):
+            if name == 'citingPaperInfo':
+                return mock_paper_info
+            elif name == 'data':
+                return mock_data
+            return MagicMock()
+
+        mock_r_result = MagicMock()
+        mock_r_result.rx2 = r_result_rx2
+
+        mock_s2_paper = MagicMock(return_value=mock_r_result)
+        r_dict = {'S2_paper2': mock_s2_paper}
+
+        # r('names') needs to return column names for paper_info
+        def mock_r_callable(expr):
+            if expr == 'names':
+                return lambda obj: ['title', 'paperId']
+            return MagicMock()
+
+        mock_r = MagicMock()
+        mock_r.__getitem__ = lambda self, key: r_dict[key]
+        mock_r.__call__ = mock_r_callable
+        mock_r.side_effect = mock_r_callable
+
+        orig_loaded = s2_mod._R_PACKAGE_LOADED
+        orig_r = s2_mod.r
+        orig_robjects = s2_mod.robjects
+        orig_df2d = s2_mod._r_dataframe_to_dicts
+        try:
+            s2_mod._R_PACKAGE_LOADED = True
+            s2_mod.r = mock_r
+            # Set robjects.NULL to a sentinel that won't match our mocks
+            mock_robjects = MagicMock()
+            mock_robjects.NULL = object()
+            s2_mod.robjects = mock_robjects
+            s2_mod._r_dataframe_to_dicts = MagicMock(return_value=mock_ref_dicts)
 
             result = await semantic_scholar_references(paper_id="10.1234/source")
 
@@ -200,34 +257,74 @@ class TestSemanticScholarSearch:
             assert result['reference_count'] == 1
             assert len(result['references']) == 1
             assert result['references'][0]['s2_id'] == 'ref_456'
-            assert result['references'][0]['is_influential'] is True
+            assert result['references'][0]['is_influential'] is False
+        finally:
+            s2_mod._R_PACKAGE_LOADED = orig_loaded
+            s2_mod.r = orig_r
+            s2_mod.robjects = orig_robjects
+            s2_mod._r_dataframe_to_dicts = orig_df2d
 
     @pytest.mark.asyncio
     async def test_semantic_scholar_citations_with_mock(self):
-        """Test forward snowball with mocked client."""
-        with patch('litrev_mcp.tools.semantic_scholar.get_s2_client') as mock_get_client:
-            mock_client = MagicMock()
-            mock_get_client.return_value = mock_client
+        """Test forward snowball with mocked R functions."""
+        import litrev_mcp.tools.semantic_scholar as s2_mod
 
-            # Create mock source paper
-            mock_source = MagicMock()
-            mock_source.paperId = 'source_123'
-            mock_source.title = 'Source Paper'
+        mock_cite_dicts = [
+            {
+                'paperId': 'cite_789',
+                'title': 'Citing Paper',
+                'year': 2022,
+                'citationCount': 5,
+                'externalIds.DOI': '10.1234/cite',
+                'authors': 'Cite Author',
+            }
+        ]
 
-            # Create mock citation
-            mock_cite = MagicMock()
-            mock_cite.paperId = 'cite_789'
-            mock_cite.title = 'Citing Paper'
-            mock_cite.year = 2022
-            mock_cite.citationCount = 5
-            mock_cite.externalIds = {'DOI': '10.1234/cite'}
-            mock_cite.isInfluential = False
-            mock_author = MagicMock()
-            mock_author.name = 'Cite Author'
-            mock_cite.authors = [mock_author]
+        # Build mock R result structure
+        mock_title_vec = MagicMock()
+        mock_title_vec.__getitem__ = lambda self, i: 'Source Paper'
 
-            mock_source.citations = [mock_cite]
-            mock_client.get_paper.return_value = mock_source
+        mock_paper_info = MagicMock()
+        mock_paper_info.rx2 = lambda name: mock_title_vec if name == 'title' else MagicMock()
+
+        mock_cites_df = MagicMock()
+        mock_data = MagicMock()
+        mock_data.rx2 = MagicMock(return_value=mock_cites_df)
+
+        def r_result_rx2(name):
+            if name == 'citedPaperInfo':
+                return mock_paper_info
+            elif name == 'data':
+                return mock_data
+            return MagicMock()
+
+        mock_r_result = MagicMock()
+        mock_r_result.rx2 = r_result_rx2
+
+        mock_s2_paper = MagicMock(return_value=mock_r_result)
+        r_dict = {'S2_paper2': mock_s2_paper}
+
+        def mock_r_callable(expr):
+            if expr == 'names':
+                return lambda obj: ['title', 'paperId']
+            return MagicMock()
+
+        mock_r = MagicMock()
+        mock_r.__getitem__ = lambda self, key: r_dict[key]
+        mock_r.__call__ = mock_r_callable
+        mock_r.side_effect = mock_r_callable
+
+        orig_loaded = s2_mod._R_PACKAGE_LOADED
+        orig_r = s2_mod.r
+        orig_robjects = s2_mod.robjects
+        orig_df2d = s2_mod._r_dataframe_to_dicts
+        try:
+            s2_mod._R_PACKAGE_LOADED = True
+            s2_mod.r = mock_r
+            mock_robjects = MagicMock()
+            mock_robjects.NULL = object()
+            s2_mod.robjects = mock_robjects
+            s2_mod._r_dataframe_to_dicts = MagicMock(return_value=mock_cite_dicts)
 
             result = await semantic_scholar_citations(paper_id="10.1234/source")
 
@@ -237,6 +334,11 @@ class TestSemanticScholarSearch:
             assert len(result['citations']) == 1
             assert result['citations'][0]['s2_id'] == 'cite_789'
             assert result['citations'][0]['is_influential'] is False
+        finally:
+            s2_mod._R_PACKAGE_LOADED = orig_loaded
+            s2_mod.r = orig_r
+            s2_mod.robjects = orig_robjects
+            s2_mod._r_dataframe_to_dicts = orig_df2d
 
 
 class TestERICSearch:
