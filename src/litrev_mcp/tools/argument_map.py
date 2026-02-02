@@ -18,20 +18,7 @@ from pathlib import Path
 from litrev_mcp.config import config_manager
 from litrev_mcp.tools import argument_map_db as db
 from litrev_mcp.tools.rag_db import checkpoint
-
-# Import Anthropic SDK for Opus
-try:
-    import anthropic
-    ANTHROPIC_AVAILABLE = True
-except ImportError:
-    ANTHROPIC_AVAILABLE = False
-
-# Import OpenAI for embeddings
-try:
-    import openai
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
+from litrev_mcp.tools.raw_http import async_anthropic_messages_raw
 
 # Import PyVis for visualization
 try:
@@ -48,7 +35,7 @@ def _make_proposition_id(name: str) -> str:
     return proposition_id
 
 
-def extract_concepts(
+async def extract_concepts(
     project: str,
     insight_id: str,
     content: Optional[str] = None,
@@ -70,12 +57,6 @@ def extract_concepts(
     Returns:
         Extracted topics, propositions, relationships, and evidence ready for add_propositions
     """
-    if not ANTHROPIC_AVAILABLE:
-        return {
-            'success': False,
-            'error': 'Anthropic SDK not installed. Run: pip install anthropic'
-        }
-
     # Get API key
     api_key = os.environ.get('ANTHROPIC_API_KEY')
     if not api_key:
@@ -190,20 +171,14 @@ Return ONLY a JSON object:
 
 Be thorough but precise. Extract 5-15 propositions typically."""
 
-    # Call Claude Opus
+    # Call Claude Opus via raw HTTP (avoids httpx deadlock in MCP event loop)
     try:
-        client = anthropic.Anthropic(api_key=api_key)
-
-        message = client.messages.create(
-            model="claude-opus-4-20250514",  # Opus 4.5
+        response_text = await async_anthropic_messages_raw(
+            model="claude-opus-4-20250514",
             max_tokens=4096,
-            messages=[
-                {"role": "user", "content": extraction_prompt}
-            ]
+            messages=[{"role": "user", "content": extraction_prompt}],
+            api_key=api_key,
         )
-
-        # Extract JSON from response
-        response_text = message.content[0].text
 
         # Try to parse JSON from the response
         # Claude might wrap it in markdown code blocks

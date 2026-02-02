@@ -1661,7 +1661,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
     # Argument Map tools
     if name == "extract_concepts":
-        result = extract_concepts(
+        result = await extract_concepts(
             project=arguments["project"],
             insight_id=arguments["insight_id"],
             content=arguments.get("content")
@@ -1822,14 +1822,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
     # Argument Map Search (GraphRAG traversal)
     if name == "embed_propositions":
-        result = embed_propositions(
+        result = await embed_propositions(
             project=arguments["project"],
             force=arguments.get("force", False),
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
     if name == "search_argument_map":
-        result = search_argument_map(
+        result = await search_argument_map(
             project=arguments["project"],
             query=arguments["query"],
             max_results=arguments.get("max_results", 10),

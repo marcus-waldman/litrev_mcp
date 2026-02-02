@@ -8,13 +8,8 @@ neighbor queries, traversal logic, and MCP tool functions.
 import sys
 import pytest
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
-
-def _mock_anthropic():
-    """Create a mock anthropic module for tests where it's not installed."""
-    mock_module = MagicMock()
-    return mock_module
 
 from litrev_mcp.tools.argument_map_search import (
     _build_embedding_text,
@@ -201,46 +196,43 @@ class TestTraverseGraph:
 
 
 class TestJudgeTraversalParams:
-    """Tests for _judge_traversal_params."""
+    """Tests for _judge_traversal_params (now async)."""
 
-    def test_fallback_no_api_key(self):
+    @pytest.mark.asyncio
+    async def test_fallback_no_api_key(self):
         """Without ANTHROPIC_API_KEY, should return defaults."""
         with patch.dict('os.environ', {}, clear=True):
-            params = _judge_traversal_params("test query", [])
+            params = await _judge_traversal_params("test query", [])
 
         assert params['hop_depth'] == 1
         assert params['relationship_types'] is None
         assert params['max_neighbors_per_hop'] == 10
 
-    def test_fallback_on_error(self):
+    @pytest.mark.asyncio
+    async def test_fallback_on_error(self):
         """On any API error, should return defaults."""
-        mock_anthropic = _mock_anthropic()
-        mock_anthropic.Anthropic.side_effect = Exception("API error")
-
         with patch.dict('os.environ', {'ANTHROPIC_API_KEY': 'test-key'}):
-            with patch.dict('sys.modules', {'anthropic': mock_anthropic}):
-                params = _judge_traversal_params("test query", [])
+            with patch('litrev_mcp.tools.argument_map_search.async_anthropic_messages_raw',
+                       new_callable=AsyncMock, side_effect=Exception("API error")):
+                params = await _judge_traversal_params("test query", [])
 
         assert params['hop_depth'] == 1
         assert params['relationship_types'] is None
 
-    def test_parses_valid_response(self):
+    @pytest.mark.asyncio
+    async def test_parses_valid_response(self):
         """Should parse valid JSON response from LLM."""
-        mock_anthropic = _mock_anthropic()
-        mock_message = MagicMock()
-        mock_message.content = [MagicMock(text=json.dumps({
+        response_json = json.dumps({
             'hop_depth': 2,
             'relationship_types': ['supports', 'contradicts'],
             'max_neighbors_per_hop': 15,
             'reasoning': 'Broad query needs more depth',
-        }))]
-        mock_client = MagicMock()
-        mock_client.messages.create.return_value = mock_message
-        mock_anthropic.Anthropic.return_value = mock_client
+        })
 
         with patch.dict('os.environ', {'ANTHROPIC_API_KEY': 'test-key'}):
-            with patch.dict('sys.modules', {'anthropic': mock_anthropic}):
-                params = _judge_traversal_params("what is the full argument?", [
+            with patch('litrev_mcp.tools.argument_map_search.async_anthropic_messages_raw',
+                       new_callable=AsyncMock, return_value=response_json):
+                params = await _judge_traversal_params("what is the full argument?", [
                     {'name': 'Test', 'definition': 'A test prop'},
                 ])
 
@@ -248,52 +240,47 @@ class TestJudgeTraversalParams:
         assert params['relationship_types'] == ['supports', 'contradicts']
         assert params['max_neighbors_per_hop'] == 15
 
-    def test_clamps_values(self):
+    @pytest.mark.asyncio
+    async def test_clamps_values(self):
         """Should clamp hop_depth and max_neighbors_per_hop."""
-        mock_anthropic = _mock_anthropic()
-        mock_message = MagicMock()
-        mock_message.content = [MagicMock(text=json.dumps({
+        response_json = json.dumps({
             'hop_depth': 99,
             'relationship_types': None,
             'max_neighbors_per_hop': 500,
             'reasoning': 'Extreme values',
-        }))]
-        mock_client = MagicMock()
-        mock_client.messages.create.return_value = mock_message
-        mock_anthropic.Anthropic.return_value = mock_client
+        })
 
         with patch.dict('os.environ', {'ANTHROPIC_API_KEY': 'test-key'}):
-            with patch.dict('sys.modules', {'anthropic': mock_anthropic}):
-                params = _judge_traversal_params("test", [])
+            with patch('litrev_mcp.tools.argument_map_search.async_anthropic_messages_raw',
+                       new_callable=AsyncMock, return_value=response_json):
+                params = await _judge_traversal_params("test", [])
 
         assert params['hop_depth'] == 3  # clamped
         assert params['max_neighbors_per_hop'] == 20  # clamped
 
-    def test_filters_invalid_relationship_types(self):
+    @pytest.mark.asyncio
+    async def test_filters_invalid_relationship_types(self):
         """Should filter out invalid relationship types."""
-        mock_anthropic = _mock_anthropic()
-        mock_message = MagicMock()
-        mock_message.content = [MagicMock(text=json.dumps({
+        response_json = json.dumps({
             'hop_depth': 1,
             'relationship_types': ['supports', 'invalid_type', 'contradicts'],
             'max_neighbors_per_hop': 10,
             'reasoning': 'Test',
-        }))]
-        mock_client = MagicMock()
-        mock_client.messages.create.return_value = mock_message
-        mock_anthropic.Anthropic.return_value = mock_client
+        })
 
         with patch.dict('os.environ', {'ANTHROPIC_API_KEY': 'test-key'}):
-            with patch.dict('sys.modules', {'anthropic': mock_anthropic}):
-                params = _judge_traversal_params("test", [])
+            with patch('litrev_mcp.tools.argument_map_search.async_anthropic_messages_raw',
+                       new_callable=AsyncMock, return_value=response_json):
+                params = await _judge_traversal_params("test", [])
 
         assert params['relationship_types'] == ['supports', 'contradicts']
 
 
 class TestSearchArgumentMap:
-    """Tests for search_argument_map MCP tool."""
+    """Tests for search_argument_map MCP tool (now async)."""
 
-    def test_no_embeddings_error(self):
+    @pytest.mark.asyncio
+    async def test_no_embeddings_error(self):
         """Should return clear error when no embeddings exist."""
         with patch('litrev_mcp.tools.argument_map_search.db') as mock_db:
             mock_db.init_argument_map_schema.return_value = None
@@ -304,13 +291,14 @@ class TestSearchArgumentMap:
                 'stale': 0,
             }
 
-            result = search_argument_map('test_project', 'some query')
+            result = await search_argument_map('test_project', 'some query')
 
         assert result['success'] is False
         assert result['error'] == 'NO_EMBEDDINGS'
         assert 'embed_propositions' in result['message']
 
-    def test_no_similar_results(self):
+    @pytest.mark.asyncio
+    async def test_no_similar_results(self):
         """Should return empty subgraph gracefully."""
         with patch('litrev_mcp.tools.argument_map_search.db') as mock_db:
             mock_db.init_argument_map_schema.return_value = None
@@ -322,15 +310,15 @@ class TestSearchArgumentMap:
             }
             mock_db.search_similar_propositions.return_value = []
 
-            with patch('litrev_mcp.tools.argument_map_search.embed_query') as mock_embed:
-                mock_embed.return_value = [0.1] * 1536
-
-                result = search_argument_map('test_project', 'totally irrelevant query')
+            with patch('litrev_mcp.tools.argument_map_search.async_embed_query_raw',
+                       new_callable=AsyncMock, return_value=[0.1] * 1536):
+                result = await search_argument_map('test_project', 'totally irrelevant query')
 
         assert result['success'] is True
         assert result['subgraph']['propositions'] == []
 
-    def test_full_pipeline(self):
+    @pytest.mark.asyncio
+    async def test_full_pipeline(self):
         """Test full search pipeline with mocked components."""
         with patch('litrev_mcp.tools.argument_map_search.db') as mock_db:
             mock_db.init_argument_map_schema.return_value = None
@@ -356,10 +344,10 @@ class TestSearchArgumentMap:
             mock_db.get_evidence.return_value = []
             mock_db.get_proposition_topics.return_value = [{'name': 'Topic 1'}]
 
-            with patch('litrev_mcp.tools.argument_map_search.embed_query') as mock_embed:
-                mock_embed.return_value = [0.1] * 1536
-
-                with patch('litrev_mcp.tools.argument_map_search._judge_traversal_params') as mock_judge:
+            with patch('litrev_mcp.tools.argument_map_search.async_embed_query_raw',
+                       new_callable=AsyncMock, return_value=[0.1] * 1536):
+                with patch('litrev_mcp.tools.argument_map_search._judge_traversal_params',
+                           new_callable=AsyncMock) as mock_judge:
                     mock_judge.return_value = {
                         'hop_depth': 1,
                         'relationship_types': None,
@@ -367,7 +355,7 @@ class TestSearchArgumentMap:
                         'reasoning': 'Test',
                     }
 
-                    result = search_argument_map('test_project', 'test query')
+                    result = await search_argument_map('test_project', 'test query')
 
         assert result['success'] is True
         assert len(result['subgraph']['propositions']) == 2
@@ -412,20 +400,22 @@ class TestExpandArgumentMap:
 
 
 class TestEmbedPropositions:
-    """Tests for embed_propositions MCP tool."""
+    """Tests for embed_propositions MCP tool (now async)."""
 
-    def test_no_propositions(self):
+    @pytest.mark.asyncio
+    async def test_no_propositions(self):
         """Should handle empty project gracefully."""
         with patch('litrev_mcp.tools.argument_map_search.db') as mock_db:
             mock_db.init_argument_map_schema.return_value = None
             mock_db.get_project_propositions.return_value = []
 
-            result = embed_propositions('empty_project')
+            result = await embed_propositions('empty_project')
 
         assert result['success'] is True
         assert result['embedded'] == 0
 
-    def test_all_already_embedded(self):
+    @pytest.mark.asyncio
+    async def test_all_already_embedded(self):
         """Should skip already-embedded propositions."""
         with patch('litrev_mcp.tools.argument_map_search.db') as mock_db:
             mock_db.init_argument_map_schema.return_value = None
@@ -436,13 +426,14 @@ class TestEmbedPropositions:
             with patch('litrev_mcp.tools.argument_map_search.get_connection') as mock_conn:
                 mock_conn.return_value.execute.return_value.fetchone.return_value = ('A: Def A',)
 
-                result = embed_propositions('test_project')
+                result = await embed_propositions('test_project')
 
         assert result['success'] is True
         assert result['embedded'] == 0
         assert result['skipped'] == 1
 
-    def test_embeds_new_propositions(self):
+    @pytest.mark.asyncio
+    async def test_embeds_new_propositions(self):
         """Should embed propositions that are not yet embedded."""
         with patch('litrev_mcp.tools.argument_map_search.db') as mock_db:
             mock_db.init_argument_map_schema.return_value = None
@@ -453,11 +444,10 @@ class TestEmbedPropositions:
             with patch('litrev_mcp.tools.argument_map_search.get_connection') as mock_conn:
                 mock_conn.return_value.execute.return_value.fetchone.return_value = None  # not embedded
 
-                with patch('litrev_mcp.tools.argument_map_search.embed_texts') as mock_embed:
-                    mock_embed.return_value = [[0.1] * 1536]
-
+                with patch('litrev_mcp.tools.argument_map_search.async_embed_texts_raw',
+                           new_callable=AsyncMock, return_value=[[0.1] * 1536]):
                     with patch('litrev_mcp.tools.argument_map_search.checkpoint'):
-                        result = embed_propositions('test_project')
+                        result = await embed_propositions('test_project')
 
         assert result['success'] is True
         assert result['embedded'] == 1

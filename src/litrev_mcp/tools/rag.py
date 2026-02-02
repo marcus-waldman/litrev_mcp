@@ -5,7 +5,7 @@ Provides semantic search over indexed PDF content using OpenAI embeddings
 and DuckDB vector similarity search.
 """
 
-import asyncio
+import os
 from pathlib import Path
 from typing import Any, Optional
 
@@ -26,10 +26,9 @@ from litrev_mcp.tools.rag_embed import (
     extract_pdf_text_with_pages,
     extract_pdf_text,
     chunk_text,
-    embed_texts,
-    embed_query,
     EmbeddingError,
 )
+from litrev_mcp.tools.raw_http import async_embed_texts_raw, async_embed_query_raw
 from litrev_mcp.tools.context import get_context_text
 
 
@@ -107,7 +106,7 @@ async def index_papers(
         get_connection()
 
         # Process papers sequentially (parallelism provides no benefit - DB writes serialize)
-        results = _index_papers_sequential(
+        results = await _index_papers_sequential(
             items=items,
             project_path=project_path,
             project=project,
@@ -157,7 +156,7 @@ async def index_papers(
         }
 
 
-def _index_papers_sequential(
+async def _index_papers_sequential(
     items: list,
     project_path: Path,
     project: str,
@@ -203,7 +202,7 @@ def _index_papers_sequential(
                 continue
 
             chunk_texts = [c['text'] for c in chunks]
-            embeddings = embed_texts(chunk_texts)
+            embeddings = await async_embed_texts_raw(chunk_texts)
 
             # Save to database
             authors = format_authors(item_data.get('creators', []))
@@ -312,8 +311,10 @@ async def search_papers(
         # Initialize connection
         get_connection()
 
-        # Generate query embedding
-        query_embedding = embed_query(query)
+        # Generate query embedding using raw HTTP to avoid OpenAI client
+        # deadlock in the MCP event loop (both sync and async httpx clients
+        # conflict with the MCP server's event loop)
+        query_embedding = await async_embed_query_raw(query)
 
         # Search for similar chunks
         results = search_similar(

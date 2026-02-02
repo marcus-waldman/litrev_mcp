@@ -12,7 +12,8 @@ import os
 from typing import Optional, Any
 
 from litrev_mcp.tools.rag_db import get_connection, checkpoint
-from litrev_mcp.tools.rag_embed import embed_texts, embed_query, EmbeddingError
+from litrev_mcp.tools.rag_embed import EmbeddingError
+from litrev_mcp.tools.raw_http import async_embed_texts_raw, async_embed_query_raw, async_anthropic_messages_raw
 from litrev_mcp.tools import argument_map_db as db
 
 
@@ -27,7 +28,7 @@ def _build_embedding_text(name: str, definition: Optional[str]) -> str:
 # MCP Tool: embed_propositions
 # ============================================================================
 
-def embed_propositions(
+async def embed_propositions(
     project: str,
     force: bool = False,
 ) -> dict:
@@ -91,7 +92,7 @@ def embed_propositions(
         for i in range(0, len(to_embed), BATCH_SIZE):
             batch = to_embed[i:i + BATCH_SIZE]
             texts = [item['text'] for item in batch]
-            embeddings = embed_texts(texts)
+            embeddings = await async_embed_texts_raw(texts)
 
             for item, embedding in zip(batch, embeddings):
                 db.upsert_proposition_embedding(
@@ -125,7 +126,7 @@ def embed_propositions(
 # Internal: LLM-judged traversal parameters
 # ============================================================================
 
-def _judge_traversal_params(
+async def _judge_traversal_params(
     query: str,
     seed_propositions: list[dict],
 ) -> dict:
@@ -175,16 +176,12 @@ Return ONLY a JSON object:
 }}"""
 
     try:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=api_key)
-        message = client.messages.create(
+        response_text = await async_anthropic_messages_raw(
             model="claude-sonnet-4-20250514",
             max_tokens=256,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            api_key=api_key,
         )
-
-        response_text = message.content[0].text
 
         # Parse JSON (may be wrapped in code blocks)
         if "```json" in response_text:
@@ -331,7 +328,7 @@ def _collect_evidence(
 # MCP Tool: search_argument_map
 # ============================================================================
 
-def search_argument_map(
+async def search_argument_map(
     project: str,
     query: str,
     max_results: int = 10,
@@ -372,7 +369,7 @@ def search_argument_map(
 
     try:
         # Step 1: Embed query
-        query_embedding = embed_query(query)
+        query_embedding = await async_embed_query_raw(query)
 
         # Step 2: Find seeds
         num_seeds = min(max_results, 5)
@@ -396,7 +393,7 @@ def search_argument_map(
             }
 
         # Step 3: Judge traversal parameters
-        traversal_params = _judge_traversal_params(query, seeds)
+        traversal_params = await _judge_traversal_params(query, seeds)
 
         # Step 4: Traverse graph
         graph = _traverse_graph(seeds, traversal_params, project)
