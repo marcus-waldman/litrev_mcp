@@ -137,6 +137,15 @@ def _init_schema(conn: duckdb.DuckDBPyConnection):
         )
     """)
 
+    # Sync sequence with existing data to prevent duplicate key errors
+    try:
+        max_id = conn.execute("SELECT COALESCE(MAX(id), 0) FROM chunks").fetchone()[0]
+        if max_id > 0:
+            conn.execute(f"ALTER SEQUENCE chunks_id_seq RESTART WITH {max_id + 1}")
+            logger.info(f"Synced chunks_id_seq to {max_id + 1}")
+    except Exception as e:
+        logger.warning(f"Could not sync chunks_id_seq: {e}")
+
     # Create HNSW index for fast vector similarity search (only if VSS available)
     if _vss_available:
         try:

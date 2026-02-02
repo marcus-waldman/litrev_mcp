@@ -208,6 +208,91 @@ def fuzzy_match_score(extracted: dict[str, Any], zotero_item: dict[str, Any]) ->
     return 0.0
 
 
+def extract_year_from_date(date_str: str) -> Optional[str]:
+    """Extract a 4-digit year from a date string like '2019', '05/2019', '2019-05-01'."""
+    if not date_str:
+        return None
+    match = re.search(r'\b(19\d{2}|20\d{2})\b', date_str)
+    if match:
+        return match.group(1)
+    return None
+
+
+def match_pdf_by_metadata(
+    project_path: Path,
+    title: str,
+    authors: str,
+    year: Optional[str] = None,
+) -> Optional[Path]:
+    """
+    Scan a directory for PDFs matching paper metadata.
+
+    Scores each PDF filename against author last name and title words.
+    Returns the best match above a minimum threshold.
+
+    Args:
+        project_path: Directory containing PDFs
+        title: Paper title
+        authors: Author string (e.g., "Smith, Jones")
+        year: Publication year string (optional, used for bonus scoring)
+
+    Returns:
+        Path to best matching PDF, or None if no good match found
+    """
+    if not title or not authors:
+        return None
+
+    # Extract first author last name
+    first_author = authors.split(',')[0].split(' and ')[0].strip()
+    author_words = [w for w in first_author.split()
+                    if w.lower() not in ('et', 'al', 'al.')
+                    and not (len(w) <= 2 and w.isupper())]
+    author_prefix = author_words[0].lower() if author_words else None
+    if not author_prefix:
+        return None
+
+    # Extract meaningful title words
+    stop_words = {'the', 'a', 'an', 'of', 'in', 'on', 'for', 'and', 'to', 'with', 'is', 'are', 'was', 'were', 'by', 'from', 'at', 'as'}
+    title_words = set(
+        w.lower() for w in re.findall(r'\w+', title)
+        if w.lower() not in stop_words and len(w) > 2
+    )
+
+    best_match = None
+    best_score = 0
+
+    for pdf in project_path.glob('*.pdf'):
+        stem = pdf.stem.lower()
+        # Replace underscores/hyphens with spaces for word matching
+        stem_words = set(re.findall(r'[a-z]+', stem))
+
+        score = 0
+
+        # Author prefix match (required)
+        if not stem.startswith(re.sub(r'[^a-z]', '', author_prefix)):
+            continue
+
+        score += 1  # Author prefix matched
+
+        # Title word overlap
+        overlap = title_words & stem_words
+        if len(overlap) >= 2:
+            score += len(overlap)
+
+        # Year match bonus
+        if year and year in stem:
+            score += 1
+
+        if score > best_score:
+            best_score = score
+            best_match = pdf
+
+    # Require at least author prefix + 2 title word matches
+    if best_score >= 3:
+        return best_match
+    return None
+
+
 def generate_citation_key(title: str, authors: str, year: str) -> str:
     """
     Generate a citation key in the format: author_shorttitle_year.

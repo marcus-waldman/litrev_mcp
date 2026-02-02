@@ -11,7 +11,7 @@ from typing import Any, Optional
 
 from litrev_mcp.config import config_manager
 from litrev_mcp.tools.zotero import get_zotero_client, get_citation_key_from_extra, format_authors
-from litrev_mcp.tools.pdf_utils import generate_citation_key
+from litrev_mcp.tools.pdf_utils import generate_citation_key, extract_year_from_date, match_pdf_by_metadata
 from litrev_mcp.tools.rag_db import (
     get_connection,
     paper_exists,
@@ -248,7 +248,7 @@ def _find_pdf(item_data: dict, project_path: Path, citation_key: Optional[str]) 
     # Try generating citation key from metadata
     title = item_data.get('title', '')
     authors = format_authors(item_data.get('creators', []))
-    year = item_data.get('date', '')[:4] if item_data.get('date') else ''
+    year = extract_year_from_date(item_data.get('date', '')) or ''
 
     if title and authors and year:
         generated_key = generate_citation_key(title, authors, year)
@@ -256,16 +256,23 @@ def _find_pdf(item_data: dict, project_path: Path, citation_key: Optional[str]) 
         if candidate.exists():
             return candidate
 
+    # Fallback: scan directory for best metadata match
+    if title and authors:
+        matched = match_pdf_by_metadata(project_path, title, authors, year)
+        if matched:
+            return matched
+
     return None
 
 
 def _extract_year(date_str: str) -> Optional[int]:
-    """Extract year from date string."""
-    if date_str and len(date_str) >= 4:
-        try:
-            return int(date_str[:4])
-        except ValueError:
-            pass
+    """Extract year from date string (handles '2019', '05/2019', '2019-05-01', etc.)."""
+    if not date_str:
+        return None
+    import re
+    match = re.search(r'\b(19\d{2}|20\d{2})\b', date_str)
+    if match:
+        return int(match.group(1))
     return None
 
 
@@ -642,7 +649,7 @@ def main():
         from litrev_mcp.tools.zotero import get_zotero_client, get_citation_key_from_extra, format_authors
         from litrev_mcp.tools.rag_db import get_connection, paper_exists, delete_paper, insert_paper, insert_chunks_batch
         from litrev_mcp.tools.rag_embed import extract_pdf_text, chunk_text, embed_texts
-        from litrev_mcp.tools.pdf_utils import generate_citation_key
+        from litrev_mcp.tools.pdf_utils import generate_citation_key, extract_year_from_date, match_pdf_by_metadata
     except ImportError as e:
         print(f"ERROR: Could not import litrev_mcp: {{e}}")
         print("Make sure litrev-mcp is installed: pip install litrev-mcp")
@@ -706,13 +713,22 @@ def main():
         if not pdf_path:
             # Try generating key from metadata
             authors = format_authors(item_data.get('creators', []))
-            year = item_data.get('date', '')[:4] if item_data.get('date') else ''
+            year = extract_year_from_date(item_data.get('date', '')) or ''
             if item_data.get('title') and authors and year:
                 gen_key = generate_citation_key(item_data['title'], authors, year)
                 candidate = project_path / f"{{gen_key}}.pdf"
                 if candidate.exists():
                     citation_key = gen_key
                     pdf_path = candidate
+
+        if not pdf_path:
+            # Fallback: scan directory for best metadata match
+            authors = format_authors(item_data.get('creators', []))
+            year = extract_year_from_date(item_data.get('date', '')) or ''
+            matched = match_pdf_by_metadata(project_path, item_data.get('title', ''), authors, year)
+            if matched:
+                pdf_path = matched
+                print(f"  Matched by metadata scan: {{matched.name}}")
 
         if not pdf_path:
             print("  SKIP: No PDF found")
@@ -736,12 +752,8 @@ def main():
 
             # Save to database
             authors = format_authors(item_data.get('creators', []))
-            year = None
-            if item_data.get('date') and len(item_data['date']) >= 4:
-                try:
-                    year = int(item_data['date'][:4])
-                except ValueError:
-                    pass
+            year_str = extract_year_from_date(item_data.get('date', ''))
+            year = int(year_str) if year_str else None
 
             insert_paper(
                 item_key=item_key,
