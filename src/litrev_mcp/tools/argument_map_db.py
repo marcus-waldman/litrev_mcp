@@ -174,8 +174,24 @@ def init_argument_map_schema():
     else:
         logger.info("Skipping HNSW index on proposition_embeddings (VSS not available)")
 
+    # Resync sequences to avoid duplicate key errors after MotherDuck reconnections
+    _resync_sequence(conn, "topic_relationships_id_seq", "topic_relationships")
+    _resync_sequence(conn, "proposition_relationships_id_seq", "proposition_relationships")
+    _resync_sequence(conn, "proposition_evidence_id_seq", "proposition_evidence")
+    _resync_sequence(conn, "proposition_conflicts_id_seq", "proposition_conflicts")
+
     # Create indexes for common queries
     _create_indexes(conn)
+
+
+def _resync_sequence(conn: duckdb.DuckDBPyConnection, seq_name: str, table: str):
+    """Drop and recreate a sequence starting at MAX(id) + 1 to avoid duplicate key errors."""
+    try:
+        max_id = conn.execute(f"SELECT COALESCE(MAX(id), 0) FROM {table}").fetchone()[0]
+        conn.execute(f"DROP SEQUENCE IF EXISTS {seq_name}")
+        conn.execute(f"CREATE SEQUENCE {seq_name} START {max_id + 1}")
+    except Exception as e:
+        logger.warning(f"Could not resync sequence {seq_name}: {e}")
 
 
 def _create_indexes(conn: duckdb.DuckDBPyConnection):
