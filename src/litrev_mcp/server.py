@@ -98,6 +98,8 @@ from litrev_mcp.tools.argument_map import (
     list_proposition_issues,
     resolve_proposition_issue,
     delete_proposition_issue,
+    list_evidence,
+    delete_evidence,
     ISSUE_TYPES,
 )
 from litrev_mcp.tools.argument_map_search import (
@@ -1285,6 +1287,35 @@ async def list_tools() -> list[Tool]:
                 "required": ["project", "issue_id"]
             }
         ),
+        # Evidence management
+        Tool(
+            name="list_evidence",
+            description="List evidence entries for a proposition (with IDs). Useful for finding duplicates or reviewing what evidence supports a proposition.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "proposition_id": {"type": "string", "description": "Proposition ID to list evidence for"},
+                    "project": {"type": "string", "description": "Limit to specific project (optional)"}
+                },
+                "required": ["proposition_id"]
+            }
+        ),
+        Tool(
+            name="delete_evidence",
+            description="Delete an evidence entry by its integer ID. CAUTION: Permanent deletion requires confirm=True.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "evidence_id": {"type": "integer", "description": "Integer ID of the evidence entry to delete"},
+                    "confirm": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Must be true to proceed with deletion"
+                    }
+                },
+                "required": ["evidence_id"]
+            }
+        ),
         # Argument Map Search (GraphRAG traversal)
         Tool(
             name="embed_propositions",
@@ -1816,6 +1847,21 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         result = delete_proposition_issue(
             project=arguments["project"],
             issue_id=arguments["issue_id"],
+            confirm=arguments.get("confirm", False)
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    # Evidence management
+    if name == "list_evidence":
+        result = list_evidence(
+            proposition_id=arguments["proposition_id"],
+            project=arguments.get("project")
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+    if name == "delete_evidence":
+        result = delete_evidence(
+            evidence_id=arguments["evidence_id"],
             confirm=arguments.get("confirm", False)
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]

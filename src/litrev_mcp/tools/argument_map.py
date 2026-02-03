@@ -2321,6 +2321,88 @@ def resolve_proposition_issue(
     }
 
 
+def list_evidence(
+    proposition_id: str,
+    project: Optional[str] = None,
+) -> dict:
+    """
+    List evidence entries for a proposition.
+
+    Args:
+        proposition_id: The proposition ID to list evidence for
+        project: Optional project code to filter by
+
+    Returns:
+        List of evidence entries with IDs
+    """
+    db.init_argument_map_schema()
+
+    # Verify proposition exists
+    proposition = db.get_proposition(proposition_id)
+    if not proposition:
+        return {
+            'success': False,
+            'error': f"Proposition '{proposition_id}' not found"
+        }
+
+    evidence = db.get_evidence(proposition_id, project)
+
+    return {
+        'success': True,
+        'proposition_id': proposition_id,
+        'proposition_name': proposition['name'],
+        'project_filter': project,
+        'evidence': evidence,
+        'count': len(evidence),
+        'message': f"Found {len(evidence)} evidence entries for '{proposition['name']}'"
+    }
+
+
+def delete_evidence(
+    evidence_id: int,
+    confirm: bool = False,
+) -> dict:
+    """
+    Delete an evidence entry by ID.
+
+    Args:
+        evidence_id: Integer ID of the evidence entry to delete
+        confirm: Must be True to proceed (safety check)
+
+    Returns:
+        Success status
+    """
+    if not confirm:
+        return {
+            'success': False,
+            'error': "Must set confirm=True to delete evidence. This action cannot be undone."
+        }
+
+    db.init_argument_map_schema()
+
+    # Verify evidence exists before deleting
+    conn = db.get_connection()
+    row = conn.execute(
+        "SELECT id, proposition_id, claim FROM proposition_evidence WHERE id = ?",
+        [evidence_id]
+    ).fetchone()
+
+    if not row:
+        return {
+            'success': False,
+            'error': f"Evidence entry with id={evidence_id} not found"
+        }
+
+    db.delete_evidence(evidence_id)
+
+    return {
+        'success': True,
+        'evidence_id': evidence_id,
+        'proposition_id': row[1],
+        'message': f"Deleted evidence entry {evidence_id} from proposition '{row[1]}'"
+    }
+
+
 def delete_proposition_issue(
     project: str,
     issue_id: str,
