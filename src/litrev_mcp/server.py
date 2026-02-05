@@ -2001,8 +2001,54 @@ async def run_server():
         )
 
 
+def _print_startup_diagnostics():
+    """Print startup diagnostics to stderr for missing critical env vars."""
+    import os
+
+    critical_vars = {
+        "ZOTERO_API_KEY": "Required for Zotero integration",
+        "ZOTERO_USER_ID": "Required for Zotero integration",
+        "MOTHERDUCK_TOKEN": "Required for database access",
+    }
+
+    missing = []
+    for var, desc in critical_vars.items():
+        if not os.environ.get(var):
+            missing.append(f"  - {var}: {desc}")
+
+    if missing:
+        print("litrev-mcp: WARNING - Missing critical environment variables:", file=sys.stderr)
+        for line in missing:
+            print(line, file=sys.stderr)
+        print("  Run 'litrev-mcp --check' for full diagnostics.", file=sys.stderr)
+
+    optional_vars = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"]
+    missing_optional = [v for v in optional_vars if not os.environ.get(v)]
+    if missing_optional:
+        print(f"litrev-mcp: Optional env vars not set: {', '.join(missing_optional)}", file=sys.stderr)
+
+
 def main():
     """Main entry point."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="litrev-mcp",
+        description="MCP server for AI-assisted literature review",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Run configuration health check and exit",
+    )
+    args = parser.parse_args()
+
+    if args.check:
+        result = asyncio.run(setup_check())
+        print(json.dumps(result, indent=2))
+        sys.exit(1 if result.get("status") == "needs_setup" else 0)
+
+    _print_startup_diagnostics()
     asyncio.run(run_server())
 
 

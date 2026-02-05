@@ -21,20 +21,36 @@ _api_key = os.environ.get('SEMANTIC_SCHOLAR_API_KEY') or os.environ.get('SEMANTI
 if _api_key and 'SEMANTICSCHOLAR_API' not in os.environ:
     os.environ['SEMANTICSCHOLAR_API'] = _api_key
 
-from rpy2 import robjects
-from rpy2.robjects import r, StrVector
+try:
+    from rpy2 import robjects
+    from rpy2.robjects import r, StrVector
+    _RPY2_AVAILABLE = True
+except ImportError:
+    _RPY2_AVAILABLE = False
+    robjects = None  # type: ignore[assignment]
+    r = None  # type: ignore[assignment]
+    StrVector = None  # type: ignore[assignment]
 
 # Load the semanticscholar R package
-try:
-    r('library(semanticscholar)')
-    _R_PACKAGE_LOADED = True
-except Exception as e:
-    _R_PACKAGE_LOADED = False
-    _R_LOAD_ERROR = str(e)
+_R_PACKAGE_LOADED = False
+_R_LOAD_ERROR = (
+    "rpy2 is not installed. Install with: pip install litrev-mcp[r]"
+)
+
+if _RPY2_AVAILABLE:
+    try:
+        r('library(semanticscholar)')
+        _R_PACKAGE_LOADED = True
+        _R_LOAD_ERROR = ""
+    except Exception as e:
+        _R_LOAD_ERROR = str(e)
 
 
 def _r_dataframe_to_dicts(df) -> List[Dict]:
     """Convert R dataframe to list of Python dicts."""
+    if not _RPY2_AVAILABLE:
+        return []
+
     # Check for NULL / None
     if df is robjects.NULL or df is None:
         return []

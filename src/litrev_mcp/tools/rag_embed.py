@@ -45,6 +45,8 @@ def embed_texts(texts: list[str], dimensions: Optional[int] = None) -> list[list
     Generate embeddings for a list of texts using OpenAI.
 
     Uses text-embedding-3-small model with configurable dimensions.
+    Automatically splits large inputs into token-aware batches to stay
+    within OpenAI's per-request token limit (~300K tokens).
     Cost: ~$0.02 per 1M tokens.
 
     Args:
@@ -60,13 +62,36 @@ def embed_texts(texts: list[str], dimensions: Optional[int] = None) -> list[list
     client = get_openai_client()
     dims = dimensions if dimensions is not None else get_embedding_dimensions()
 
+    # Split into token-aware batches.
+    # Our word_count * 1.3 heuristic underestimates actual BPE tokens by ~20-25%
+    # for scientific text, so we use 200K to stay safely under OpenAI's 300K limit.
+    max_tokens_per_batch = 200_000
+    batches: list[list[str]] = []
+    current_batch: list[str] = []
+    current_tokens = 0
+
+    for text in texts:
+        text_tokens = _estimate_tokens(text)
+        if current_batch and current_tokens + text_tokens > max_tokens_per_batch:
+            batches.append(current_batch)
+            current_batch = [text]
+            current_tokens = text_tokens
+        else:
+            current_batch.append(text)
+            current_tokens += text_tokens
+    if current_batch:
+        batches.append(current_batch)
+
     try:
-        response = client.embeddings.create(
-            model="text-embedding-3-small",
-            input=texts,
-            dimensions=dims
-        )
-        return [item.embedding for item in response.data]
+        all_embeddings: list[list[float]] = []
+        for batch in batches:
+            response = client.embeddings.create(
+                model="text-embedding-3-small",
+                input=batch,
+                dimensions=dims
+            )
+            all_embeddings.extend([item.embedding for item in response.data])
+        return all_embeddings
     except Exception as e:
         raise EmbeddingError(f"Failed to generate embeddings: {e}")
 

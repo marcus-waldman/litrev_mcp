@@ -9,7 +9,6 @@ dependencies = [
     "mcp>=1.0.0",
     "pyzotero>=1.5.0",
     "biopython>=1.80",
-    "rpy2>=3.5.0",
     "httpx>=0.27.0",
     "pydantic>=2.0.0",
     "pyyaml>=6.0",
@@ -41,6 +40,9 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [project.optional-dependencies]
+r = [
+    "rpy2>=3.5.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
