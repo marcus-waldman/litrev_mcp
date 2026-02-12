@@ -39,6 +39,7 @@ async def extract_concepts(
     project: str,
     insight_id: str,
     content: Optional[str] = None,
+    extracted_data: Optional[dict] = None,
 ) -> dict:
     """
     Extract argument structure from an insight using Claude Opus.
@@ -53,10 +54,31 @@ async def extract_concepts(
         project: Project code
         insight_id: The insight ID (filename without extension)
         content: Optional insight content (will read from file if not provided)
+        extracted_data: Optional pre-extracted data dict (skip API call).
+            Keys: suggested_topics, propositions, evidence, relationships
 
     Returns:
         Extracted topics, propositions, relationships, and evidence ready for add_propositions
     """
+    # If pre-extracted data is provided, skip the API call entirely
+    if extracted_data is not None:
+        extracted = extracted_data
+        return {
+            'success': True,
+            'project': project,
+            'insight_id': insight_id,
+            'extracted': extracted,
+            'topics_count': len(extracted.get('suggested_topics', [])),
+            'propositions_count': len(extracted.get('propositions', [])),
+            'relationships_count': len(extracted.get('relationships', [])),
+            'evidence_count': len(extracted.get('evidence', [])),
+            'message': f"Extracted {len(extracted.get('suggested_topics', []))} topics, "
+                      f"{len(extracted.get('propositions', []))} propositions, "
+                      f"{len(extracted.get('relationships', []))} relationships, "
+                      f"{len(extracted.get('evidence', []))} evidence entries. "
+                      "Review and use add_propositions to confirm."
+        }
+
     # Get API key
     api_key = os.environ.get('ANTHROPIC_API_KEY')
     if not api_key:

@@ -909,7 +909,8 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "project": {"type": "string", "description": "Project code"},
                     "insight_id": {"type": "string", "description": "Insight ID (filename without extension)"},
-                    "content": {"type": "string", "description": "Optional insight content (will read from file if not provided)"}
+                    "content": {"type": "string", "description": "Optional insight content (will read from file if not provided)"},
+                    "extracted_data": {"type": "object", "description": "Pre-extracted data (skip API call). Keys: suggested_topics, propositions, evidence, relationships"}
                 },
                 "required": ["project", "insight_id"]
             }
@@ -1695,7 +1696,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         result = await extract_concepts(
             project=arguments["project"],
             insight_id=arguments["insight_id"],
-            content=arguments.get("content")
+            content=arguments.get("content"),
+            extracted_data=arguments.get("extracted_data")
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
