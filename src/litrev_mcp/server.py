@@ -903,7 +903,7 @@ async def list_tools() -> list[Tool]:
         # Argument Map tools (formerly Concept Map)
         Tool(
             name="extract_concepts",
-            description="Extract argument structure from an insight using Claude Opus 4.5. Identifies topics (high-level themes), propositions (arguable assertions), evidence (citable claims), and relationships. Returns extracted data for review before adding to argument map with add_propositions.",
+            description="Extract argument structure from an insight using Claude Opus 4.5. Identifies topics (high-level themes), propositions (arguable assertions), evidence (citable claims), and relationships. Returns extracted data for review before adding to argument map with add_propositions. When calling from Claude Code, YOU are already Claude — read the insight content yourself, extract the argument structure (suggested_topics, propositions, evidence, relationships), and pass it via the extracted_data parameter to skip the redundant API call. No ANTHROPIC_API_KEY is needed when extracted_data is provided.",
             inputSchema={
                 "type": "object",
                 "properties": {
