@@ -84,7 +84,10 @@ async def extract_concepts(
     if not api_key:
         return {
             'success': False,
-            'error': 'ANTHROPIC_API_KEY environment variable not set'
+            'error': 'ANTHROPIC_API_KEY not set. You are Claude — read the insight content yourself, '
+                     'extract the argument structure (suggested_topics, propositions, evidence, relationships), '
+                     'and call this tool again with the extracted_data parameter. '
+                     'See the tool description for the expected schema.'
         }
 
     # Read insight content if not provided
