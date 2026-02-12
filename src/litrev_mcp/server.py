@@ -590,7 +590,7 @@ async def list_tools() -> list[Tool]:
         # PDF Processing tools
         Tool(
             name="process_pdf_inbox",
-            description="Process PDFs in a project's to_add/ folder. Matches them to existing Zotero entries, renames with citation keys, and updates status. Returns unmatched PDFs for interactive review.",
+            description="Process PDFs and EPUBs in a project's to_add/ folder. Matches them to existing Zotero entries, renames with citation keys, and updates status. Returns unmatched files for interactive review.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -604,7 +604,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="migrate_zotero_attachments",
-            description="Migrate PDFs stored on Zotero's servers to Google Drive. Downloads server-stored attachments, saves to Drive folder with citation key naming, adds Drive link to Zotero, and deletes original. Useful for papers added by drag-drop.",
+            description="Migrate PDFs and EPUBs stored on Zotero's servers to Google Drive. Downloads server-stored attachments, saves to Drive folder with citation key naming, adds Drive link to Zotero, and deletes original. Useful for papers added by drag-drop.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -619,7 +619,7 @@ async def list_tools() -> list[Tool]:
         # RAG (Literature Search) tools
         Tool(
             name="index_papers",
-            description="Index PDFs from a project for semantic search. Extracts text, chunks it, generates OpenAI embeddings, and stores in DuckDB. Opens a browser-based progress dashboard. Run this before using search_papers or ask_papers.",
+            description="Index PDFs and EPUBs from a project for semantic search. Extracts text, chunks it, generates OpenAI embeddings, and stores in DuckDB. Run this before using search_papers or ask_papers.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -655,7 +655,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="search_papers",
-            description="Semantic search across indexed paper PDFs. Returns relevant passages with citation keys and page numbers. Use index_papers first to build the index.",
+            description="Semantic search across indexed papers (PDFs and EPUBs). Returns relevant passages with citation keys and page/chapter numbers. Use index_papers first to build the index.",
             inputSchema={
                 "type": "object",
                 "properties": {

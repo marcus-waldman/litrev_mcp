@@ -23,6 +23,7 @@ dependencies = [
     "websockets>=12.0",
     "pyvis>=0.3.0",
     "mpxpy>=0.0.18",
+    "ebooklib>=0.18",
 ]
 
 [project.scripts]

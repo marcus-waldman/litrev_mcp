@@ -83,6 +83,29 @@ def extract_pdf_metadata(filepath: Path) -> dict[str, Any]:
     return result
 
 
+def extract_document_metadata(filepath: Path) -> dict[str, Any]:
+    """Extract metadata from a document file (PDF or EPUB).
+
+    Dispatches to the appropriate extractor based on file extension.
+    Returns the same dict shape regardless of format.
+    """
+    ext = filepath.suffix.lower()
+    if ext == '.pdf':
+        return extract_pdf_metadata(filepath)
+    elif ext == '.epub':
+        from litrev_mcp.tools.epub_utils import extract_epub_metadata
+        return extract_epub_metadata(filepath)
+    else:
+        return {
+            'title': None,
+            'authors': None,
+            'year': None,
+            'doi': None,
+            'first_page_text': '',
+            'source_file': filepath.name,
+        }
+
+
 def extract_doi_from_text(text: str) -> Optional[str]:
     """Extract DOI from text using regex patterns."""
     # Common DOI patterns
@@ -261,7 +284,9 @@ def match_pdf_by_metadata(
     best_match = None
     best_score = 0
 
-    for pdf in project_path.glob('*.pdf'):
+    from litrev_mcp.tools.formats import find_document_files
+
+    for pdf in find_document_files(project_path):
         stem = pdf.stem.lower()
         # Replace underscores/hyphens with spaces for word matching
         stem_words = set(re.findall(r'[a-z]+', stem))
@@ -279,9 +304,15 @@ def match_pdf_by_metadata(
         if len(overlap) >= 2:
             score += len(overlap)
 
-        # Year match bonus
-        if year and year in stem:
-            score += 1
+        # Year handling: bonus for match, skip if filename has a different year
+        if year:
+            stem_year_match = re.search(r'(\d{4})', stem)
+            if stem_year_match:
+                if stem_year_match.group(1) == year:
+                    score += 1  # Year match bonus
+                else:
+                    continue  # Wrong year — skip this candidate
+            # No year in filename — no bonus, no penalty
 
         if score > best_score:
             best_score = score

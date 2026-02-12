@@ -62,6 +62,20 @@ def embed_texts(texts: list[str], dimensions: Optional[int] = None) -> list[list
     client = get_openai_client()
     dims = dimensions if dimensions is not None else get_embedding_dimensions()
 
+    # Per-input token limit for text-embedding-3-small is 8191.
+    # Use 4000 estimated tokens as truncation threshold — the word_count*1.3
+    # heuristic can underestimate by up to ~55% on scientific/math text.
+    max_tokens_per_input = 4000
+
+    # Truncate any oversized individual texts
+    def _truncate(t: str) -> str:
+        if _estimate_tokens(t) <= max_tokens_per_input:
+            return t
+        max_words = int(max_tokens_per_input / 1.3)
+        return " ".join(t.split()[:max_words])
+
+    texts = [_truncate(t) for t in texts]
+
     # Split into token-aware batches.
     # Our word_count * 1.3 heuristic underestimates actual BPE tokens by ~20-25%
     # for scientific text, so we use 200K to stay safely under OpenAI's 300K limit.
@@ -149,6 +163,31 @@ def extract_pdf_text(filepath: Path, use_mathpix: bool = False) -> tuple[str, li
         except Exception as e:
             logger.warning(f"Mathpix extraction failed, falling back to pdfplumber: {e}")
     return extract_pdf_text_with_pages(filepath)
+
+
+def extract_document_text(filepath: Path, use_mathpix: bool = False) -> tuple[str, list[int]]:
+    """Extract text from a document file (PDF or EPUB).
+
+    Dispatches to the appropriate extractor based on file extension.
+
+    Args:
+        filepath: Path to the document file
+        use_mathpix: If True and file is a PDF, try Mathpix first
+
+    Returns:
+        Tuple of (full_text, break_positions)
+
+    Raises:
+        ValueError: If the file extension is not supported
+    """
+    ext = filepath.suffix.lower()
+    if ext == '.pdf':
+        return extract_pdf_text(filepath, use_mathpix=use_mathpix)
+    elif ext == '.epub':
+        from litrev_mcp.tools.epub_utils import extract_epub_text_with_chapters
+        return extract_epub_text_with_chapters(filepath)
+    else:
+        raise ValueError(f"Unsupported file format: {ext}")
 
 
 def _clean_text(text: str) -> str:
@@ -243,19 +282,62 @@ def chunk_text(
     return chunks
 
 
-def _split_into_paragraphs(text: str) -> list[str]:
-    """Split text into paragraphs."""
-    # Split on double newlines or sentence-ending punctuation followed by space
+def _split_into_paragraphs(text: str, max_tokens: int = 4000) -> list[str]:
+    """Split text into paragraphs, breaking oversized ones at sentence boundaries.
+
+    Args:
+        text: Full text to split
+        max_tokens: Maximum estimated tokens per paragraph. Default 4000 keeps
+            well under the 8192 per-input token limit of text-embedding-3-small.
+            The word_count*1.3 heuristic can underestimate by up to ~55% on
+            scientific text with math notation (4000*1.55 = 6200, safe margin).
+    """
     paragraphs = re.split(r'\n\n+', text)
 
-    # Filter empty paragraphs and normalize
     result = []
     for para in paragraphs:
         para = para.strip()
-        if para and len(para) > 10:  # Skip very short fragments
+        if not para or len(para) <= 10:
+            continue
+        if _estimate_tokens(para) <= max_tokens:
             result.append(para)
+        else:
+            result.extend(_split_long_paragraph(para, max_tokens))
 
     return result
+
+
+def _split_long_paragraph(text: str, max_tokens: int) -> list[str]:
+    """Split an oversized paragraph into smaller pieces at sentence boundaries."""
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+
+    pieces = []
+    current = ""
+    for sentence in sentences:
+        if current and _estimate_tokens(current + " " + sentence) > max_tokens:
+            pieces.append(current.strip())
+            current = sentence
+        else:
+            current = (current + " " + sentence) if current else sentence
+
+    if current.strip():
+        pieces.append(current.strip())
+
+    # Safety: if any piece is still too long (no sentence breaks found),
+    # hard-split by word count
+    final = []
+    max_words = int(max_tokens / 1.3)
+    for piece in pieces:
+        words = piece.split()
+        if len(words) <= max_words:
+            final.append(piece)
+        else:
+            for i in range(0, len(words), max_words):
+                chunk = " ".join(words[i:i + max_words])
+                if chunk:
+                    final.append(chunk)
+
+    return final
 
 
 def _estimate_tokens(text: str) -> int:

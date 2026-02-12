@@ -13,9 +13,11 @@ from typing import Any, Optional
 from litrev_mcp.config import config_manager
 from litrev_mcp.tools.pdf_utils import (
     extract_pdf_metadata,
+    extract_document_metadata,
     fuzzy_match_score,
     generate_citation_key,
 )
+from litrev_mcp.tools.formats import find_document_files, document_filename
 from litrev_mcp.tools.zotero import (
     get_zotero_client,
     get_citation_key_from_extra,
@@ -200,13 +202,13 @@ async def process_pdf_inbox(project: str) -> dict[str, Any]:
                 'errors': [],
             }
 
-        # Find all PDFs in inbox
-        pdf_files = list(inbox_path.glob("*.pdf"))
+        # Find all document files in inbox
+        pdf_files = find_document_files(inbox_path)
         if not pdf_files:
             return {
                 'success': True,
                 'project': project,
-                'message': "No PDF files found in to_add folder.",
+                'message': "No document files (PDF/EPUB) found in to_add folder.",
                 'processed': [],
                 'needs_review': [],
                 'errors': [],
@@ -284,8 +286,8 @@ async def _process_single_pdf(
 
     Returns dict with status 'processed' or 'needs_review'.
     """
-    # Extract metadata from PDF
-    extracted = extract_pdf_metadata(pdf_path)
+    # Extract metadata from document (PDF or EPUB)
+    extracted = extract_document_metadata(pdf_path)
 
     # Find best match in Zotero
     best_match = None
@@ -323,8 +325,8 @@ async def _process_single_pdf(
                 best_match['year'],
             )
 
-        # New filename
-        new_filename = f"{citation_key}.pdf"
+        # New filename (preserves original extension: .pdf or .epub)
+        new_filename = document_filename(citation_key, pdf_path)
         new_path = project_path / new_filename
 
         # Move and rename file
@@ -535,30 +537,31 @@ async def _migrate_single_item(
     # Get children (attachments) for this item
     children = zot.children(item_key)
 
-    # Find server-stored PDF attachments (linkMode: "imported_file" or "imported_url")
-    pdf_attachments = []
+    # Find server-stored document attachments (linkMode: "imported_file" or "imported_url")
+    _MIGRATABLE_TYPES = {'pdf', 'epub'}
+    doc_attachments = []
     has_drive_link = False
 
     for child in children:
         child_data = child.get('data', {})
         link_mode = child_data.get('linkMode', '')
-        content_type = child_data.get('contentType', '')
+        content_type = child_data.get('contentType', '').lower()
 
         # Check if already has a Google Drive link
         if link_mode == 'linked_url' and 'drive.google.com' in child_data.get('url', ''):
             has_drive_link = True
 
-        # Find imported PDF attachments
-        if link_mode in ('imported_file', 'imported_url') and 'pdf' in content_type.lower():
-            pdf_attachments.append(child)
+        # Find imported PDF or EPUB attachments
+        if link_mode in ('imported_file', 'imported_url') and any(t in content_type for t in _MIGRATABLE_TYPES):
+            doc_attachments.append(child)
 
-    # Skip if no server-stored PDFs
-    if not pdf_attachments:
+    # Skip if no server-stored documents
+    if not doc_attachments:
         return {
             'status': 'skipped',
             'item_key': item_key,
             'title': title,
-            'reason': 'No server-stored PDF attachments found',
+            'reason': 'No server-stored document attachments found',
         }
 
     # Skip if already has Drive link (avoid duplicates)
@@ -579,18 +582,25 @@ async def _migrate_single_item(
             item_data.get('date', '')[:4] if item_data.get('date') else '',
         )
 
-    # Process first PDF attachment (usually there's only one)
-    attachment = pdf_attachments[0]
+    # Process first document attachment (usually there's only one)
+    attachment = doc_attachments[0]
     attachment_data = attachment.get('data', {})
     attachment_key = attachment_data.get('key')
 
-    # Download the PDF content
-    pdf_content = zot.file(attachment_key)
+    # Download the file content
+    file_content = zot.file(attachment_key)
+
+    # Determine extension from content type
+    att_content_type = attachment_data.get('contentType', '').lower()
+    if 'epub' in att_content_type:
+        ext = '.epub'
+    else:
+        ext = '.pdf'
 
     # Save to project folder
-    filename = f"{citation_key}.pdf"
+    filename = f"{citation_key}{ext}"
     file_path = project_path / filename
-    file_path.write_bytes(pdf_content)
+    file_path.write_bytes(file_content)
 
     # Wait for Google Drive sync and get link
     # Note: Google Drive sync can take 30+ seconds for new files
@@ -613,12 +623,13 @@ async def _migrate_single_item(
             'status': 'skipped',
             'item_key': item_key,
             'title': title,
-            'reason': f'PDF saved to {filename} but could not get Google Drive link (sync delay?)',
+            'reason': f'File saved to {filename} but could not get Google Drive link (sync delay?)',
             'filename': filename,
         }
 
     # Add Drive link as attachment
-    link_result = _sync_add_link(zot, item_key, drive_url, "PDF - Google Drive")
+    link_label = "EPUB - Google Drive" if ext == '.epub' else "PDF - Google Drive"
+    link_result = _sync_add_link(zot, item_key, drive_url, link_label)
 
     if not link_result.get('success'):
         return {

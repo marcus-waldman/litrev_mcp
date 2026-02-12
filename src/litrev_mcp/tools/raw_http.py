@@ -21,20 +21,36 @@ from litrev_mcp.tools.rag_embed import get_embedding_dimensions, EmbeddingError,
 _MAX_TOKENS_PER_BATCH = 200_000
 
 
+# Per-input token limit for text-embedding-3-small is 8191.
+# Use 4000 estimated tokens as the truncation threshold — the word_count*1.3
+# heuristic can underestimate by up to ~55% on scientific/math text.
+_MAX_TOKENS_PER_INPUT = 4000
+
+
+def _truncate_oversized(text: str) -> str:
+    """Truncate a single text if it exceeds the per-input token limit."""
+    if _estimate_tokens(text) <= _MAX_TOKENS_PER_INPUT:
+        return text
+    max_words = int(_MAX_TOKENS_PER_INPUT / 1.3)
+    words = text.split()
+    return " ".join(words[:max_words])
+
+
 def _split_into_token_batches(texts: list[str]) -> list[list[str]]:
     """Split texts into batches that fit within OpenAI's token limit.
 
     Uses conservative token estimation to stay well under the 300K limit.
+    Also truncates individual texts exceeding the per-input token limit.
     """
     batches = []
     current_batch: list[str] = []
     current_tokens = 0
 
     for text in texts:
+        text = _truncate_oversized(text)
         text_tokens = _estimate_tokens(text)
 
         # If adding this text would exceed the limit, start a new batch
-        # (but if current_batch is empty, add it anyway — let OpenAI handle truly oversized single texts)
         if current_batch and current_tokens + text_tokens > _MAX_TOKENS_PER_BATCH:
             batches.append(current_batch)
             current_batch = [text]

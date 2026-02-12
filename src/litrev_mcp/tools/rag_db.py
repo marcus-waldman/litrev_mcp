@@ -194,6 +194,13 @@ def insert_paper(
     """, [item_key, citation_key, title, authors, year, project, pdf_path, total_chunks, datetime.now()])
 
 
+def _next_chunk_id() -> int:
+    """Get the next available chunk ID (bypasses sequence for MotherDuck compatibility)."""
+    conn = get_connection()
+    max_id = conn.execute("SELECT COALESCE(MAX(id), 0) FROM chunks").fetchone()[0]
+    return max_id + 1
+
+
 def insert_chunk(
     item_key: str,
     chunk_index: int,
@@ -203,10 +210,11 @@ def insert_chunk(
 ):
     """Insert a chunk with its embedding."""
     conn = get_connection()
+    next_id = _next_chunk_id()
     conn.execute("""
-        INSERT INTO chunks (item_key, chunk_index, page_number, text, embedding)
-        VALUES (?, ?, ?, ?, ?)
-    """, [item_key, chunk_index, page_number, text, embedding])
+        INSERT INTO chunks (id, item_key, chunk_index, page_number, text, embedding)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, [next_id, item_key, chunk_index, page_number, text, embedding])
 
 
 def insert_chunks_batch(
@@ -224,16 +232,17 @@ def insert_chunks_batch(
     """
     conn = get_connection()
 
-    # Prepare data for batch insert
+    # Explicitly assign IDs to bypass MotherDuck sequence issues
+    start_id = _next_chunk_id()
     data = [
-        (item_key, chunk['chunk_index'], chunk.get('page_number'), chunk['text'], embedding)
-        for chunk, embedding in zip(chunks, embeddings)
+        (start_id + i, item_key, chunk['chunk_index'], chunk.get('page_number'), chunk['text'], embedding)
+        for i, (chunk, embedding) in enumerate(zip(chunks, embeddings))
     ]
 
     # Use executemany for efficient batch insert
     conn.executemany("""
-        INSERT INTO chunks (item_key, chunk_index, page_number, text, embedding)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO chunks (id, item_key, chunk_index, page_number, text, embedding)
+        VALUES (?, ?, ?, ?, ?, ?)
     """, data)
 
 

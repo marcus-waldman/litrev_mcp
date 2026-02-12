@@ -25,9 +25,11 @@ from litrev_mcp.tools.rag_db import (
 from litrev_mcp.tools.rag_embed import (
     extract_pdf_text_with_pages,
     extract_pdf_text,
+    extract_document_text,
     chunk_text,
     EmbeddingError,
 )
+from litrev_mcp.tools.formats import find_document_by_key
 from litrev_mcp.tools.raw_http import async_embed_texts_raw, async_embed_query_raw
 from litrev_mcp.tools.context import get_context_text
 
@@ -180,10 +182,10 @@ async def _index_papers_sequential(
                 skipped.append({'item_key': item_key, 'citation_key': citation_key, 'reason': 'Already indexed'})
                 continue
 
-            # Find PDF
-            pdf_path = _find_pdf(item_data, project_path, citation_key)
-            if not pdf_path:
-                skipped.append({'item_key': item_key, 'citation_key': citation_key, 'reason': 'No PDF found'})
+            # Find document (PDF or EPUB)
+            doc_path = _find_document(item_data, project_path, citation_key)
+            if not doc_path:
+                skipped.append({'item_key': item_key, 'citation_key': citation_key, 'reason': 'No document found'})
                 continue
 
             # Delete existing if reindexing
@@ -191,7 +193,7 @@ async def _index_papers_sequential(
                 delete_paper(item_key)
 
             # Extract, chunk, embed, save
-            text, page_breaks = extract_pdf_text(pdf_path, use_mathpix=use_mathpix)
+            text, page_breaks = extract_document_text(doc_path, use_mathpix=use_mathpix)
             if not text.strip():
                 skipped.append({'item_key': item_key, 'citation_key': citation_key, 'reason': 'No extractable text'})
                 continue
@@ -215,7 +217,7 @@ async def _index_papers_sequential(
                 authors=authors,
                 year=year,
                 project=project,
-                pdf_path=str(pdf_path),
+                pdf_path=str(doc_path),
                 total_chunks=len(chunks),
             )
             insert_chunks_batch(item_key=item_key, chunks=chunks, embeddings=embeddings)
@@ -237,13 +239,13 @@ async def _index_papers_sequential(
     return {'indexed': indexed, 'skipped': skipped, 'errors': errors}
 
 
-def _find_pdf(item_data: dict, project_path: Path, citation_key: Optional[str]) -> Optional[Path]:
-    """Find PDF file for a paper."""
+def _find_document(item_data: dict, project_path: Path, citation_key: Optional[str]) -> Optional[Path]:
+    """Find a document file (PDF or EPUB) for a paper."""
     # Try citation key from Extra field
     if citation_key:
-        candidate = project_path / f"{citation_key}.pdf"
-        if candidate.exists():
-            return candidate
+        found = find_document_by_key(project_path, citation_key)
+        if found:
+            return found
 
     # Try generating citation key from metadata
     title = item_data.get('title', '')
@@ -252,9 +254,9 @@ def _find_pdf(item_data: dict, project_path: Path, citation_key: Optional[str]) 
 
     if title and authors and year:
         generated_key = generate_citation_key(title, authors, year)
-        candidate = project_path / f"{generated_key}.pdf"
-        if candidate.exists():
-            return candidate
+        found = find_document_by_key(project_path, generated_key)
+        if found:
+            return found
 
     # Fallback: scan directory for best metadata match
     if title and authors:
@@ -648,8 +650,9 @@ def main():
         from litrev_mcp.config import config_manager
         from litrev_mcp.tools.zotero import get_zotero_client, get_citation_key_from_extra, format_authors
         from litrev_mcp.tools.rag_db import get_connection, paper_exists, delete_paper, insert_paper, insert_chunks_batch
-        from litrev_mcp.tools.rag_embed import extract_pdf_text, chunk_text, embed_texts
+        from litrev_mcp.tools.rag_embed import extract_document_text, chunk_text, embed_texts
         from litrev_mcp.tools.pdf_utils import generate_citation_key, extract_year_from_date, match_pdf_by_metadata
+        from litrev_mcp.tools.formats import find_document_by_key
     except ImportError as e:
         print(f"ERROR: Could not import litrev_mcp: {{e}}")
         print("Make sure litrev-mcp is installed: pip install litrev-mcp")
@@ -703,41 +706,39 @@ def main():
         if force_reindex and paper_exists(item_key):
             delete_paper(item_key)
 
-        # Find PDF
-        pdf_path = None
+        # Find document (PDF or EPUB)
+        doc_path = None
         if citation_key:
-            candidate = project_path / f"{{citation_key}}.pdf"
-            if candidate.exists():
-                pdf_path = candidate
+            doc_path = find_document_by_key(project_path, citation_key)
 
-        if not pdf_path:
+        if not doc_path:
             # Try generating key from metadata
             authors = format_authors(item_data.get('creators', []))
             year = extract_year_from_date(item_data.get('date', '')) or ''
             if item_data.get('title') and authors and year:
                 gen_key = generate_citation_key(item_data['title'], authors, year)
-                candidate = project_path / f"{{gen_key}}.pdf"
-                if candidate.exists():
+                found = find_document_by_key(project_path, gen_key)
+                if found:
                     citation_key = gen_key
-                    pdf_path = candidate
+                    doc_path = found
 
-        if not pdf_path:
+        if not doc_path:
             # Fallback: scan directory for best metadata match
             authors = format_authors(item_data.get('creators', []))
             year = extract_year_from_date(item_data.get('date', '')) or ''
             matched = match_pdf_by_metadata(project_path, item_data.get('title', ''), authors, year)
             if matched:
-                pdf_path = matched
+                doc_path = matched
                 print(f"  Matched by metadata scan: {{matched.name}}")
 
-        if not pdf_path:
-            print("  SKIP: No PDF found")
+        if not doc_path:
+            print("  SKIP: No document found")
             skipped += 1
             continue
 
         try:
             # Extract text
-            text, page_breaks = extract_pdf_text(pdf_path, use_mathpix=True)
+            text, page_breaks = extract_document_text(doc_path, use_mathpix=True)
             if not text.strip():
                 print("  SKIP: No extractable text")
                 skipped += 1
@@ -762,7 +763,7 @@ def main():
                 authors=authors,
                 year=year,
                 project=project,
-                pdf_path=str(pdf_path),
+                pdf_path=str(doc_path),
                 total_chunks=len(chunks),
             )
             insert_chunks_batch(item_key=item_key, chunks=chunks, embeddings=embeddings)
